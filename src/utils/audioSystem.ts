@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { db } from './db';
 
 /**
  * 音乐轨道接口
@@ -6,7 +7,7 @@ import { ref } from 'vue';
 export interface Track {
   id: string;
   name: string;
-  file: File;
+  blob: Blob; // 改为存储 Blob
   url: string;
 }
 
@@ -18,15 +19,36 @@ export class AudioSystem {
   public analyser: AnalyserNode | null = null;
   public audioTag: HTMLAudioElement | null = null;
   public dataArray: Uint8Array | null = null;
-
+  
   public isPlaying = ref(false);
   public fileName = ref('');
   public playlist = ref<Track[]>([]);
   public currentIndex = ref(-1);
 
-  // 进度相关
+  // 进度与音量相关
   public currentTime = ref(0);
   public duration = ref(0);
+  public volume = ref(0.7);
+
+  /**
+   * 初始化：从数据库加载缓存的音乐
+   */
+  public async init() {
+    try {
+      const records = await db.music.toArray();
+      if (records && records.length > 0) {
+        const cachedTracks: Track[] = records.map(r => ({
+          id: r.uid,
+          name: r.name,
+          blob: r.data,
+          url: URL.createObjectURL(r.data)
+        }));
+        this.playlist.value.push(...cachedTracks);
+      }
+    } catch (err) {
+      console.error('加载缓存音乐失败:', err);
+    }
+  }
 
   /**
    * 初始化音频上下文
@@ -36,45 +58,56 @@ export class AudioSystem {
       this.audioContext = new AudioContext();
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = 512;
-
+      
       const bufferLength = this.analyser.frequencyBinCount;
       this.dataArray = new Uint8Array(bufferLength);
     }
   }
 
   /**
-   * 验证文件是否为有效的音频文件（通过尝试全量解码）
-   * @param file 文件对象
+   * 验证文件是否为有效的音频文件
    */
-  private async validateAudio(file: File): Promise<boolean> {
-    const audioContext = new AudioContext();
+  private async validateAudio(blob: Blob): Promise<boolean> {
+    const tempContext = new AudioContext();
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await tempContext.decodeAudioData(arrayBuffer);
       return audioBuffer !== null;
     } catch {
       return false;
     } finally {
-      await audioContext.close();
+      await tempContext.close();
     }
   }
 
   /**
-   * 添加歌曲到列表（带格式校验）
-   * @param files 文件列表
+   * 添加歌曲到列表（带格式校验，并将 File 转为 Blob 存入 Dexie）
    */
   public async addTracksWithValidation(files: File[]) {
     const validTracks: Track[] = [];
     const invalidFiles: string[] = [];
 
     for (const file of files) {
+      // File 本身就是 Blob，我们可以直接用它验证
       const isValid = await this.validateAudio(file);
       if (isValid) {
+        const uid = Math.random().toString(36).substring(2, 9);
+        
+        // 显式转换为 Blob 存储，丢弃 File 特有的 metadata（如 lastModified）
+        const pureBlob = new Blob([file], { type: file.type });
+
         validTracks.push({
-          id: Math.random().toString(36).substring(2, 9),
+          id: uid,
           name: file.name,
-          file: file,
-          url: URL.createObjectURL(file)
+          blob: pureBlob,
+          url: URL.createObjectURL(pureBlob)
+        });
+
+        // 存入数据库
+        await db.music.add({
+          uid: uid,
+          name: file.name,
+          data: pureBlob
         });
       } else {
         invalidFiles.push(file.name);
@@ -87,7 +120,6 @@ export class AudioSystem {
 
     if (validTracks.length > 0) {
       this.playlist.value.push(...validTracks);
-      // 如果当前没在播放，播放新加的第一首
       if (this.currentIndex.value === -1) {
         this.playTrack(this.playlist.value.length - validTracks.length);
       }
@@ -110,13 +142,13 @@ export class AudioSystem {
     this.audioTag = new Audio();
     this.audioTag.src = track.url;
     this.audioTag.crossOrigin = "anonymous";
+    this.audioTag.volume = this.volume.value;
 
-    // 修复：将音频标签连接到分析器
+    // 连接节点
     const sourceNode = this.audioContext!.createMediaElementSource(this.audioTag);
     sourceNode.connect(this.analyser!);
     this.analyser!.connect(this.audioContext!.destination);
 
-    // 确保音频上下文已启动
     if (this.audioContext!.state === 'suspended') {
       this.audioContext!.resume();
     }
@@ -132,7 +164,7 @@ export class AudioSystem {
       console.error('播放失败:', err);
       this.isPlaying.value = false;
     });
-
+    
     this.isPlaying.value = true;
 
     this.audioTag.onended = () => {
@@ -141,17 +173,49 @@ export class AudioSystem {
   }
 
   /**
-   * 跳转播放时间
+   * 从列表和数据库中移除歌曲
    */
+  public async removeTrack(index: number) {
+    const track = this.playlist.value[index];
+    if (!track) return;
+
+    await db.music.where('uid').equals(track.id).delete();
+    URL.revokeObjectURL(track.url);
+
+    if (this.currentIndex.value === index) {
+      this.stopCurrent();
+      this.currentIndex.value = -1;
+    } else if (this.currentIndex.value > index) {
+      this.currentIndex.value--;
+    }
+
+    this.playlist.value.splice(index, 1);
+  }
+
+  /**
+   * 清空所有
+   */
+  public async clearAll() {
+    this.stopCurrent();
+    await db.music.clear();
+    this.playlist.value.forEach(t => URL.revokeObjectURL(t.url));
+    this.playlist.value = [];
+    this.currentIndex.value = -1;
+  }
+
+  public setVolume(val: number) {
+    this.volume.value = val;
+    if (this.audioTag) {
+      this.audioTag.volume = val;
+    }
+  }
+
   public seek(time: number) {
     if (this.audioTag) {
       this.audioTag.currentTime = time;
     }
   }
 
-  /**
-   * 切换播放/暂停
-   */
   public togglePlay() {
     if (!this.audioTag) return;
 
@@ -159,7 +223,7 @@ export class AudioSystem {
       this.audioTag.pause();
     } else {
       this.audioContext?.resume();
-      this.audioTag.play().catch(() => { });
+      this.audioTag.play().catch(() => {});
     }
     this.isPlaying.value = !this.isPlaying.value;
   }

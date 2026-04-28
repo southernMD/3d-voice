@@ -13,7 +13,10 @@ const audio = new AudioSystem();
 const view = new Visualizer();
 let animationId: number;
 
-onMounted(() => {
+onMounted(async () => {
+  // 加载缓存的音乐
+  await audio.init();
+  
   if (container.value) {
     view.init(container.value);
     animate();
@@ -34,15 +37,11 @@ const animate = () => {
   view.update(data);
 };
 
-/**
- * 使用 File System API 选择并上传文件
- */
 const handleFileUpload = async () => {
   try {
-    // 调用 File System Access API
     const fileHandles = await (window as any).showOpenFilePicker({
       multiple: true,
-      types: [] // 允许所有类型
+      types: [] 
     });
 
     const files: File[] = [];
@@ -56,7 +55,6 @@ const handleFileUpload = async () => {
       if (!playlistVisible.value) playlistVisible.value = true;
     }
   } catch (err: any) {
-    // 忽略用户取消选择的情况
     if (err.name !== 'AbortError') {
       console.error('选择文件出错:', err);
     }
@@ -69,9 +67,6 @@ const handleResize = () => {
   }
 };
 
-/**
- * 格式化时间为 MM:SS
- */
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return '00:00';
   const mins = Math.floor(seconds / 60);
@@ -79,17 +74,11 @@ const formatTime = (seconds: number) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-/**
- * 进度百分比
- */
 const progressPercent = computed(() => {
   if (audio.duration.value === 0) return 0;
   return (audio.currentTime.value / audio.duration.value) * 100;
 });
 
-/**
- * 跳转播放时间
- */
 const onProgressClick = (e: MouseEvent) => {
   const bar = e.currentTarget as HTMLElement;
   const rect = bar.getBoundingClientRect();
@@ -97,14 +86,30 @@ const onProgressClick = (e: MouseEvent) => {
   const percentage = x / rect.width;
   audio.seek(percentage * audio.duration.value);
 };
+
+// 音量控制逻辑
+const lastVolume = ref(0.7);
+
+const handleVolumeChange = (e: Event) => {
+  const val = parseFloat((e.target as HTMLInputElement).value);
+  audio.setVolume(val);
+  if (val > 0) lastVolume.value = val;
+};
+
+const toggleMute = () => {
+  if (audio.volume.value > 0) {
+    lastVolume.value = audio.volume.value;
+    audio.setVolume(0);
+  } else {
+    audio.setVolume(lastVolume.value || 0.7);
+  }
+};
 </script>
 
 <template>
   <div class="visualizer-container">
-    <!-- 3D 渲染器 -->
     <div ref="container" class="three-container"></div>
     
-    <!-- 顶部标题与当前信息 -->
     <div class="top-bar">
       <div class="branding">
         <h1>3D 沉浸式频谱</h1>
@@ -115,7 +120,6 @@ const onProgressClick = (e: MouseEvent) => {
       </div>
     </div>
 
-    <!-- 底部控制栏 -->
     <div class="bottom-controls">
       <!-- 进度条 -->
       <div class="progress-container">
@@ -128,12 +132,33 @@ const onProgressClick = (e: MouseEvent) => {
         <span class="time">{{ formatTime(audio.duration.value) }}</span>
       </div>
 
-      <div class="playback-btns">
-        <button class="icon-btn" @click="audio.prev()" title="上一首">⏮</button>
-        <button class="play-pause-btn" @click="audio.togglePlay()" :title="audio.isPlaying.value ? '暂停' : '播放'">
-          {{ audio.isPlaying.value ? '⏸' : '▶' }}
-        </button>
-        <button class="icon-btn" @click="audio.next()" title="下一首">⏭</button>
+      <div class="control-row">
+        <!-- 播放按钮组 -->
+        <div class="playback-btns">
+          <button class="icon-btn" @click="audio.prev()" title="上一首">⏮</button>
+          <button class="play-pause-btn" @click="audio.togglePlay()" :title="audio.isPlaying.value ? '暂停' : '播放'">
+            {{ audio.isPlaying.value ? '⏸' : '▶' }}
+          </button>
+          <button class="icon-btn" @click="audio.next()" title="下一首">⏭</button>
+        </div>
+
+        <!-- 音量控制 (悬浮竖向滑块) -->
+        <div class="volume-wrapper">
+          <div class="volume-popover">
+            <input 
+              type="range" 
+              min="0" 
+              max="1" 
+              step="0.01" 
+              :value="audio.volume.value" 
+              @input="handleVolumeChange"
+              class="vol-slider-vertical"
+            />
+          </div>
+          <button class="vol-btn" @click="toggleMute">
+            {{ audio.volume.value === 0 ? '🔇' : '🔊' }}
+          </button>
+        </div>
       </div>
 
       <div class="action-btns">
@@ -144,7 +169,6 @@ const onProgressClick = (e: MouseEvent) => {
       </div>
     </div>
 
-    <!-- 播放列表子组件 -->
     <PlaylistPanel 
       :audio="audio" 
       :visible="playlistVisible" 
@@ -221,17 +245,20 @@ const onProgressClick = (e: MouseEvent) => {
   gap: 1.2rem;
   z-index: 100;
   width: 100%;
-  max-width: 800px;
-  padding: 0 2rem;
+  max-width: 900px;
+  padding: 0 2.5rem;
+  pointer-events: none; /* 让子元素自己处理点击 */
 }
 
-/* 进度条样式 */
+.bottom-controls > * {
+  pointer-events: auto; /* 恢复子元素的点击 */
+}
+
 .progress-container {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0 1rem;
 }
 
 .time {
@@ -255,11 +282,6 @@ const onProgressClick = (e: MouseEvent) => {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
   position: relative;
-  transition: height 0.2s;
-}
-
-.progress-bar-wrapper:hover .progress-bar-bg {
-  height: 6px;
 }
 
 .progress-fill {
@@ -270,10 +292,21 @@ const onProgressClick = (e: MouseEvent) => {
   box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
 }
 
+.control-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 1rem;
+}
+
 .playback-btns {
   display: flex;
   align-items: center;
   gap: 2rem;
+  flex: 1;
+  justify-content: center;
+  margin-left: 100px; /* 偏移以居中 */
 }
 
 .play-pause-btn {
@@ -291,11 +324,6 @@ const onProgressClick = (e: MouseEvent) => {
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.play-pause-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
-}
-
 .icon-btn {
   background: none;
   border: none;
@@ -311,31 +339,103 @@ const onProgressClick = (e: MouseEvent) => {
   transform: scale(1.2);
 }
 
+/* 音量控制新样式 */
+.volume-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.vol-btn {
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  transition: all 0.3s;
+  z-index: 2;
+}
+
+.vol-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.volume-popover {
+  position: absolute;
+  bottom: 55px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 15, 15, 0.9);
+  backdrop-filter: blur(20px);
+  padding: 15px 8px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.volume-wrapper:hover .volume-popover {
+  opacity: 1;
+  visibility: visible;
+  bottom: 60px;
+}
+
+.vol-slider-vertical {
+  -webkit-appearance: none;
+  width: 4px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  appearance: slider-vertical; /* 现代浏览器支持竖向 */
+  writing-mode: bt-lr; /* 某些旧版写法 */
+}
+
+/* 如果浏览器不支持 appearance: slider-vertical，手动旋转 */
+@supports not (appearance: slider-vertical) {
+  .vol-slider-vertical {
+    transform: rotate(-90deg);
+    width: 100px;
+    height: 4px;
+    margin: 48px 0;
+  }
+}
+
+.vol-slider-vertical::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
 .action-btns {
   display: flex;
-  gap: 1.2rem;
+  gap: 1rem;
 }
 
 .btn.glass {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
-  padding: 0.6rem 1.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s;
-  font-size: 0.8rem;
-  letter-spacing: 1px;
-}
-
-.btn.glass:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: white;
-}
-
-.hidden-input {
-  display: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
 }
 </style>

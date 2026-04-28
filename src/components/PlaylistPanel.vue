@@ -73,10 +73,14 @@ const close = () => {
     <div ref="mask" class="playlist-mask" @click="close"></div>
 
     <!-- 播放列表面板 -->
+    <!-- 播放列表面板 -->
     <div ref="panel" class="playlist-panel">
       <div class="panel-header">
         <h2>播放列表</h2>
-        <button class="close-btn" @click="close">×</button>
+        <div class="header-btns">
+          <button v-if="audio.playlist.value.length > 0" class="clear-btn" @click="audio.clearAll()">清空列表</button>
+          <button class="close-btn" @click="close">×</button>
+        </div>
       </div>
       
       <div class="track-list">
@@ -91,16 +95,20 @@ const close = () => {
             <div class="track-title">{{ track.name }}</div>
           </div>
           
-          <!-- 播放中动画状态 -->
-          <div v-if="audio.currentIndex.value === index && audio.isPlaying.value" class="playing-indicator">
-            <div class="bar"></div>
-            <div class="bar"></div>
-            <div class="bar"></div>
+          <div class="track-actions">
+            <!-- 播放中动画状态 -->
+            <div v-if="audio.currentIndex.value === index && audio.isPlaying.value" class="playing-indicator">
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+            </div>
+            <!-- 删除按钮 -->
+            <button class="remove-btn" @click.stop="audio.removeTrack(index)" title="从缓存移除">🗑</button>
           </div>
         </div>
 
         <div v-if="audio.playlist.value.length === 0" class="empty-tip">
-          还没有歌曲<br>请点击下方“添加音乐”
+          还没有歌曲<br>请点击左下角“添加音乐”
         </div>
       </div>
     </div>
@@ -115,7 +123,7 @@ const close = () => {
   width: 100vw;
   height: 100vh;
   z-index: 1000;
-  pointer-events: none; /* 穿透到 3D 场景 */
+  pointer-events: none;
 }
 
 .playlist-mask {
@@ -125,7 +133,7 @@ const close = () => {
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0.2);
-  pointer-events: auto; /* 拦截点击 */
+  pointer-events: auto;
 }
 
 .playlist-panel {
@@ -140,11 +148,11 @@ const close = () => {
   display: flex;
   flex-direction: column;
   box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
-  pointer-events: auto; /* 拦截点击 */
+  pointer-events: auto;
 }
 
 .panel-header {
-  padding: 1.5rem 2rem;
+  padding: 0.5rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -157,6 +165,29 @@ const close = () => {
   font-size: 1.3rem;
   letter-spacing: 0.3rem;
   color: rgba(255, 255, 255, 0.9);
+}
+
+.header-btns {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.clear-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.clear-btn:hover {
+  background: rgba(255, 50, 50, 0.2);
+  color: #ff5555;
+  border-color: #ff5555;
 }
 
 .close-btn {
@@ -177,7 +208,7 @@ const close = () => {
 .track-list {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 0;
+  padding: 0.5rem 0;
 }
 
 .track-list::-webkit-scrollbar {
@@ -189,7 +220,7 @@ const close = () => {
 }
 
 .track-item {
-  padding: 1.2rem 2rem;
+  padding: 0.5rem 1rem;
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -200,7 +231,6 @@ const close = () => {
 
 .track-item:hover {
   background: rgba(255, 255, 255, 0.05);
-  padding-left: 2.5rem;
 }
 
 .track-item.active {
@@ -232,6 +262,33 @@ const close = () => {
 .track-item.active .track-title {
   color: #00ffff;
   font-weight: 500;
+}
+
+.track-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.2s;
+}
+
+.track-item:hover .remove-btn {
+  opacity: 0.4;
+  transform: scale(1);
+}
+
+.remove-btn:hover {
+  opacity: 1 !important;
+  color: #ff5555;
 }
 
 .playing-indicator {
