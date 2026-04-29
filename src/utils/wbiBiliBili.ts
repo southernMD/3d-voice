@@ -34,7 +34,7 @@ function encWbi(params: any, img_key: any, sub_key: any) {
 }
 
 // 获取最新的 img_key 和 sub_key
-async function getWbiKeys(SESSDATA: string) {
+async function getWbiKeys(SESSDATA?: string) {
   const res = await fetch('/bili-api/x/web-interface/nav', {
     headers: {
       'X-Bili-Sessdata': SESSDATA || '',
@@ -55,7 +55,7 @@ async function getWbiKeys(SESSDATA: string) {
   }
 }
 
-export async function WBI(SESSDATA: string, params: any = { foo: '114', bar: '514', baz: 1919810 }) {
+export async function WBI(SESSDATA?: string, params: any = { foo: '114', bar: '514', baz: 1919810 }) {
   const web_keys = await getWbiKeys(SESSDATA)
   const
     img_key = web_keys.img_key,
