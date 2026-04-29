@@ -2,9 +2,56 @@ import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url';
 import vue from '@vitejs/plugin-vue'
 
+// 自定义 B 站下载代理插件，解决动态域名和 Referer 问题
+const biliProxyPlugin = () => ({
+  name: 'bili-proxy',
+  configureServer(server: any) {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (req.url?.startsWith('/bili-download')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const targetUrl = url.searchParams.get('url');
+        const referer = url.searchParams.get('referer');
+        const sessData = req.headers['x-bili-sessdata'];
+
+        if (!targetUrl) return next();
+
+        try {
+          const response = await fetch(targetUrl, {
+            headers: {
+              'Referer': referer || 'https://www.bilibili.com',
+              'User-Agent': 'Mozilla/5.0',
+              'Cookie': sessData ? `SESSDATA=${sessData}` : ''
+            }
+          });
+
+          res.writeHead(response.status, {
+            'Content-Type': response.headers.get('Content-Type') || 'audio/mpeg',
+            'Access-Control-Allow-Origin': '*',
+          });
+
+          if (response.body) {
+             const reader = response.body.getReader();
+             while (true) {
+               const { done, value } = await reader.read();
+               if (done) break;
+               res.write(Buffer.from(value));
+             }
+          }
+          res.end();
+        } catch (e) {
+          res.statusCode = 500;
+          res.end('Proxy Error');
+        }
+        return;
+      }
+      next();
+    });
+  }
+});
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), biliProxyPlugin()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -20,6 +67,14 @@ export default defineConfig({
         headers: {
           'Referer': 'https://www.bilibili.com',
           'Origin': 'https://www.bilibili.com'
+        },
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const sessData = req.headers['x-bili-sessdata'];
+            if (sessData) {
+              proxyReq.setHeader('Cookie', `SESSDATA=${sessData}`);
+            }
+          });
         }
       },
       // 代理 B 站封面

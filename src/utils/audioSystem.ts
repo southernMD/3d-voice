@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 import { db } from './db';
-import { parseBilibiliUrl, getVideoInfo, getPlayUrl } from './bilibili';
+import { parseBilibiliUrl, getVideoMsg, getVideoDowloadLink } from './bilibili';
 
 /**
  * 音乐轨道接口
@@ -144,20 +144,28 @@ export class AudioSystem {
     if (!bvid) throw new Error('无效的 B 站链接');
 
     // 1. 获取视频信息
-    const info = await getVideoInfo(bvid);
+    const info = await getVideoMsg(bvid);
     const title = info.title;
     const cid = info.cid;
 
-    // 2. 获取 DASH 播放地址
-    const playData = await getPlayUrl(bvid, cid, sessData);
-
-    // 优先选择音质最好的轨道
-    const audioUrl = playData.dash.audio[0].base_url || playData.dash.audio[0].baseUrl;
+    // 2. 获取播放链接数据 (注意顺序：cid, bvid)
+    const downloadData = await getVideoDowloadLink(cid, bvid, sessData);
+    const audioUrl = downloadData.audio.base_url || downloadData.audio.baseUrl;
     if (!audioUrl) throw new Error('未找到有效的音频轨道');
 
-    // 3. 下载音频 Blob
-    const response = await fetch(audioUrl);
-    if (!response.ok) throw new Error('下载音频流失败，可能存在跨域限制');
+    // 3. 下载音频 Blob (核心重现：对应 info/dowloadBiliBili.ts 的 downloadFile 逻辑)
+    // 浏览器环境必须通过代理设置 Referer
+    const isProd = import.meta.env.PROD;
+    const referer = `https://www.bilibili.com/video/${bvid}`; // 对应脚本中的 webUrl
+    const fetchUrl = isProd
+      ? `/api/download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`
+      : `/bili-download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`;
+
+    const response = await fetch(fetchUrl, {
+      headers: sessData ? { 'X-Bili-Sessdata': sessData } : {}
+    });
+
+    if (!response.ok) throw new Error('下载音频流失败，Referer 校验未通过');
     const blob = await response.blob();
 
     // 4. 存入数据库和列表
