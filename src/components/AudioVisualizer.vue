@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
+import { useViewport } from '@/utils/viewport';
 import PlaylistPanel from './PlaylistPanel.vue';
 
 // 引用与状态
@@ -11,9 +12,13 @@ const playlistVisible = ref(false);
 // 初始化系统 (单例)
 const audio = new AudioSystem();
 const view = new Visualizer();
+const viewport = useViewport();
 let animationId: number;
 
 onMounted(async () => {
+  // 初始化视口监控
+  viewport.init();
+
   // 加载缓存的音乐
   await audio.init();
   
@@ -29,6 +34,7 @@ onUnmounted(() => {
   cancelAnimationFrame(animationId);
   audio.dispose();
   view.dispose();
+  viewport.destroy();
 });
 
 const animate = () => {
@@ -179,12 +185,11 @@ const toggleMute = () => {
 
 <style scoped>
 .visualizer-container {
-  --vh: 1vh;
-  overflow: hidden;
-  height: calc(100 * var(--vh));
   width: 100vw;
+  height: var(--visual-height, 100vh);
   position: relative;
   background: #050505;
+  overflow: hidden;
   color: white;
 }
 
