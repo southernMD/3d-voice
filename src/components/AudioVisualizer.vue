@@ -179,11 +179,12 @@ const toggleMute = () => {
 
 <style scoped>
 .visualizer-container {
+  --vh: 1vh;
+  overflow: hidden;
+  height: calc(100 * var(--vh));
   width: 100vw;
-  height: 100vh;
   position: relative;
   background: #050505;
-  overflow: hidden;
   color: white;
 }
 
