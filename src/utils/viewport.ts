@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue';
+import { ref } from 'vue';
 
 /**
  * 视口管理工具：解决移动端 100vh 包含导航栏导致的遮挡问题
