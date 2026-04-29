@@ -15,7 +15,6 @@ export const getVideoMsg = async (videoPath: string, sessData?: string): Promise
         const config = {
             headers: {
                 'User-Agent': `${UA}`,
-                'X-Bili-Sessdata': sessData || ''
             }
         };
 
@@ -62,8 +61,8 @@ export const getAcceptQuality = async (cid: string | number, bvid: string, sessD
     const config = {
         headers: {
             'User-Agent': `${UA}`,
-            'X-Bili-Sessdata': sessData || ''
-        }
+        },
+        responseType: 'json'
     }
 
     const result = await fetch(`/bili-api/x/player/wbi/playurl?${newApiParams}`, config);
