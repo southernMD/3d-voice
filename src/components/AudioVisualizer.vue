@@ -237,7 +237,7 @@ const toggleMute = () => {
 
 .bottom-controls {
   position: absolute;
-  bottom: 2.5rem;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -247,8 +247,8 @@ const toggleMute = () => {
   z-index: 100;
   width: 100%;
   max-width: 900px;
-  padding: 0 2.5rem;
-  pointer-events: none; /* 让子元素自己处理点击 */
+  padding: 0 1.5rem;
+  pointer-events: none;
 }
 
 .bottom-controls > * {
@@ -438,5 +438,52 @@ const toggleMute = () => {
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.8rem;
+}
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .branding h1 {
+    font-size: 1.1rem;
+    letter-spacing: 0.2rem;
+  }
+  
+  .top-bar {
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+  }
+
+  .current-track {
+    padding: 0.5rem 1rem;
+  }
+
+  .track-name {
+    max-width: 150px;
+    font-size: 0.8rem;
+  }
+
+  .control-row {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .playback-btns {
+    margin-left: 0;
+    gap: 1.5rem;
+  }
+
+  .volume-wrapper {
+    display: none; /* 移动端通常直接使用系统音量，隐藏自定义滑块以节省空间 */
+  }
+
+  .action-btns {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .btn.glass {
+    flex: 1;
+    text-align: center;
+    padding: 0.5rem;
+  }
 }
 </style>
