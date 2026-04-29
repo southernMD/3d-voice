@@ -46,6 +46,7 @@ export const getVideoMsg = async (videoPath: string, sessData?: string): Promise
  * 获取视频清晰度列表 (直接迁移自 info/dowloadBiliBili.ts)
  */
 export const getAcceptQuality = async (cid: string | number, bvid: string, sessData?: string) => {
+    const isProd = import.meta.env.PROD;
     const config = {
         headers: {
             'User-Agent': `${UA}`,
@@ -65,7 +66,11 @@ export const getAcceptQuality = async (cid: string | number, bvid: string, sessD
         gaia_source: `${sessData}`
     })
 
-    const result = await fetch(`/bili-api/x/player/wbi/playurl?${newApiParams}`, config);
+    const apiUrl = isProd 
+        ? `/api/proxy?path=x/player/wbi/playurl&${newApiParams}`
+        : `/bili-api/x/player/wbi/playurl?${newApiParams}`;
+
+    const result = await fetch(apiUrl, config);
     return await result.json()
 }
 
