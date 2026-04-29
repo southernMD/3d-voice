@@ -62,13 +62,26 @@ export class Visualizer {
    */
   private initPillars() {
     const geometry = new THREE.BoxGeometry(0.15, 1, 0.15);
+    const half = this.BAR_COUNT / 2;
 
     for (let i = 0; i < this.BAR_COUNT; i++) {
-      const angle = (i / this.BAR_COUNT) * Math.PI * 2;
+      // 计算角度：0~63 往顺时针走半圈，64~127 往逆时针走半圈
+      // 这样低频（i=0 和 i=64）都会从同一个起点出发
+      let angle;
+      const localIdx = i % half;
+      const ratio = localIdx / half;
+      
+      if (i < half) {
+        angle = ratio * Math.PI; // 顺时针半圈 (0 -> PI)
+      } else {
+        angle = -ratio * Math.PI; // 逆时针半圈 (0 -> -PI)
+      }
+
       const x = Math.cos(angle) * this.RADIUS;
       const z = Math.sin(angle) * this.RADIUS;
 
-      const color = new THREE.Color().setHSL(i / this.BAR_COUNT, 0.8, 0.5);
+      // 颜色也保持对称
+      const color = new THREE.Color().setHSL(ratio, 0.8, 0.5);
       const material = new THREE.MeshStandardMaterial({
         color,
         emissive: color,
@@ -200,29 +213,22 @@ export class Visualizer {
       const fftSize = dataArray.length;
       let totalEnergy = 0;
 
-      for (let i = 0; i < this.BAR_COUNT; i++) {
-        // 频率映射
-        const index = Math.floor(Math.pow(i / this.BAR_COUNT, 1.3) * fftSize * 0.7);
+      const half = this.BAR_COUNT / 2;
+      for (let i = 0; i < half; i++) {
+        // 只需要计算一半的数据，然后同时更新对称的两侧
+        const index = Math.floor(Math.pow(i / half, 1.3) * fftSize * 0.7);
         const value = dataArray[index] || 0;
-        totalEnergy += value;
+        totalEnergy += value * 2;
 
-        // 计算高度
         const scale = 0.1 + (value / 255) * 12;
-
-        // 更新光柱：上下对称生长
-        this.barsUpper[i].scale.y = THREE.MathUtils.lerp(this.barsUpper[i].scale.y, scale, 0.2);
-        this.barsUpper[i].position.y = this.barsUpper[i].scale.y / 2;
-
-        this.barsLower[i].scale.y = this.barsUpper[i].scale.y;
-        this.barsLower[i].position.y = -this.barsLower[i].scale.y / 2;
-
-        // 动态自发光
-        const emissiveIntensity = 0.5 + (value / 255) * 4;
-        (this.barsUpper[i].material as THREE.MeshStandardMaterial).emissiveIntensity = emissiveIntensity;
-        (this.barsLower[i].material as THREE.MeshStandardMaterial).emissiveIntensity = emissiveIntensity;
+        
+        // 更新顺时针侧 (索引 i)
+        this.updatePillarPair(i, scale, value);
+        // 更新逆时针侧 (索引 i + half)
+        this.updatePillarPair(i + half, scale, value);
       }
 
-      // 使用峰值能量检测（比平均值更灵敏，更容易捕捉鼓点）
+      // 使用峰值能量检测
       const maxVal = Math.max(...Array.from(dataArray));
       const pulse = maxVal / 255;
 
@@ -253,6 +259,25 @@ export class Visualizer {
 
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * 辅助方法：更新一对光柱（上+下）
+   */
+  private updatePillarPair(idx: number, scale: number, value: number) {
+    if (!this.barsUpper[idx]) return;
+    
+    // 平滑高度
+    this.barsUpper[idx].scale.y = THREE.MathUtils.lerp(this.barsUpper[idx].scale.y, scale, 0.2);
+    this.barsUpper[idx].position.y = this.barsUpper[idx].scale.y / 2;
+
+    this.barsLower[idx].scale.y = this.barsUpper[idx].scale.y;
+    this.barsLower[idx].position.y = -this.barsLower[idx].scale.y / 2;
+
+    // 动态自发光
+    const emissiveIntensity = 0.5 + (value / 255) * 4;
+    (this.barsUpper[idx].material as THREE.MeshStandardMaterial).emissiveIntensity = emissiveIntensity;
+    (this.barsLower[idx].material as THREE.MeshStandardMaterial).emissiveIntensity = emissiveIntensity;
   }
 
   /**
