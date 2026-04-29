@@ -2,6 +2,8 @@ export const config = {
   runtime: 'edge',
 };
 
+import { getNewSecToken } from './biliCaptcha';
+
 export default async function handler(req: Request) {
   const url = new URL(req.url);
   const targetUrl = url.searchParams.get('url');
@@ -12,28 +14,45 @@ export default async function handler(req: Request) {
     return new Response('Missing target url', { status: 400 });
   }
 
-  const requestHeaders: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     'Referer': referer,
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   };
 
-  if (sessData) {
-    requestHeaders['Cookie'] = `SESSDATA=${sessData}`;
-  }
+  const getFullHeaders = (secToken?: string) => {
+    const h = { ...baseHeaders };
+    let cookieStr = '';
+    if (sessData) cookieStr += `SESSDATA=${sessData}; `;
+    if (secToken) cookieStr += `X-BILI-SEC-TOKEN=${secToken}; `;
+    if (cookieStr) h['Cookie'] = cookieStr;
+    return h;
+  };
 
   try {
-    const response = await fetch(targetUrl, {
-      headers: requestHeaders,
-    });
+    let response = await fetch(targetUrl, { headers: getFullHeaders() });
+
+    // 处理 412 风险控制
+    if (response.status === 412) {
+      console.log('[Download] 412 detected, attempting to solve challenge...');
+      const setCookie = response.headers.get('set-cookie');
+      if (setCookie && setCookie.includes('X-BILI-SEC-TOKEN')) {
+        const newToken = await getNewSecToken(setCookie);
+        
+        if (newToken) {
+          console.log('[Download] Challenge solved, retrying with new token...');
+          response = await fetch(targetUrl, { headers: getFullHeaders(newToken) });
+        }
+      }
+    }
 
     const newHeaders = new Headers(response.headers);
-    // 强制添加 CORS 头，允许浏览器前端读取数据
     newHeaders.set('Access-Control-Allow-Origin', '*');
-    newHeaders.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    newHeaders.set('Access-Control-Allow-Headers', 'X-Bili-Sessdata');
+    newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, X-Bili-Sessdata');
 
     return new Response(response.body, {
       status: response.status,
+      statusText: response.statusText,
       headers: newHeaders,
     });
   } catch (error) {
