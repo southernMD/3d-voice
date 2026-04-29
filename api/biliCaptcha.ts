@@ -4,25 +4,46 @@
  * 参考 g.js 逻辑，使用 Web Crypto API 进行 SHA256 碰撞
  */
 
-async function sha256(data: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(data);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+const encoder = new TextEncoder();
+const hexTable = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+
+function bufToHex(buffer: ArrayBuffer): string {
+    const uint8Arr = new Uint8Array(buffer);
+    let hex = '';
+    for (let i = 0; i < uint8Arr.length; i++) {
+        hex += hexTable[uint8Arr[i]];
+    }
+    return hex;
 }
 
 /**
- * 计算 PoW 结果
+ * 计算 PoW 结果 (并行优化版)
  * @param q 盐值 (a)
  * @param r 目标哈希 (b)
  */
 async function solvePow(q: string, r: string): Promise<number | null> {
     const limit = 5000000;
-    for (let i = 0; i < limit; i++) {
-        const hash = await sha256(q + i.toString());
-        if (hash === r) {
-            return i;
+    const batchSize = 250; // 每批次并行处理的数量
+
+    for (let i = 0; i < limit; i += batchSize) {
+        const promises: Promise<ArrayBuffer>[] = [];
+        
+        for (let j = 0; j < batchSize && (i + j) < limit; j++) {
+            const data = encoder.encode(q + (i + j).toString());
+            promises.push(crypto.subtle.digest('SHA-256', data));
+        }
+
+        const buffers = await Promise.all(promises);
+        
+        for (let j = 0; j < buffers.length; j++) {
+            if (bufToHex(buffers[j]) === r) {
+                return i + j;
+            }
+        }
+
+        // 每处理 10 万次打个日志，方便观察进度
+        if (i % 100000 === 0 && i > 0) {
+            console.log(`[Captcha] Progress: ${i}/${limit}`);
         }
     }
     return null;
