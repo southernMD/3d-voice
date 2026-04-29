@@ -3,31 +3,43 @@ import { WBI } from './wbiBiliBili';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15'
 
 /**
- * 解析 B 站链接获取 BVID
+ * 获取视频信息 (完全重现 info/dowloadBiliBili.ts 的 HTML 解析逻辑)
  */
-export function parseBilibiliUrl(url: string): string | null {
-    const bvidReg = /BV[a-zA-Z0-9]{10}/;
-    const match = url.match(bvidReg);
-    return match ? match[0] : null;
-}
+export const getVideoMsg = async (videoPath: string, sessData?: string): Promise<any> => {
+    const isProd = import.meta.env.PROD;
+    const proxyUrl = isProd
+        ? `/api/download?url=${encodeURIComponent(videoPath)}`
+        : `/bili-download?url=${encodeURIComponent(videoPath)}`;
 
-/**
- * 获取视频信息 (迁移自 info/dowloadBiliBili.ts)
- */
-export const getVideoMsg = async (videoPath: string, sessData?: string) => {
-    const bvid = parseBilibiliUrl(videoPath);
-    if (!bvid) throw new Error('无效的 B 站链接');
+    try {
+        const config = {
+            headers: {
+                'User-Agent': `${UA}`,
+                'X-Bili-Sessdata': sessData || ''
+            }
+        };
 
-    const config = {
-        headers: {
-            'User-Agent': `${UA}`,
-            'X-Bili-Sessdata': sessData || ''
+        const response = await fetch(proxyUrl, config);
+
+        // 如果代理返回了重定向地址 (或者 response.url 发生了变化)
+        if (response.redirected) {
+            return await getVideoMsg(response.url, sessData);
+        } else {
+            const html = await response.text();
+            const reg = /<script>window\.__INITIAL_STATE__=([\s\S]*?);\(function\(\)/;
+
+            if (!html) throw new Error('获取视频信息失败: 源码为空');
+
+            const matchResult = html.match(reg);
+            if (!matchResult) throw new Error('获取视频信息失败: 未找到 INITIAL_STATE');
+
+            const { videoData } = JSON.parse(matchResult[1]);
+            return videoData;
         }
+    } catch (error) {
+        console.error('getVideoMsg 出错:', error);
+        throw error;
     }
-
-    const res = await fetch(`/bili-api/x/web-interface/view?bvid=${bvid}`, config);
-    const { data } = await res.json();
-    return data;
 };
 
 /**
