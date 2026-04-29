@@ -2,29 +2,6 @@ import { WBI } from './wbiBiliBili';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15'
 
-let currentSecToken = localStorage.getItem('bili_sec_token') || '';
-
-const getBaseConfig = (sessData?: string) => {
-    const headers: Record<string, string> = {
-        'User-Agent': `${UA}`,
-        'X-Bili-Sessdata': sessData || ''
-    };
-    if (currentSecToken) {
-        headers['X-Bili-Sec-Token'] = currentSecToken;
-    }
-    return { headers };
-};
-
-const handleResponse = (response: Response) => {
-    const newToken = response.headers.get('X-Bili-Sec-Token');
-    if (newToken) {
-        currentSecToken = newToken;
-        localStorage.setItem('bili_sec_token', newToken);
-        console.log('[Bilibili] Updated Sec-Token:', newToken);
-    }
-    return response;
-};
-
 /**
  * 获取视频信息 (完全重现 info/dowloadBiliBili.ts 的 HTML 解析逻辑)
  */
@@ -35,8 +12,14 @@ export const getVideoMsg = async (videoPath: string, sessData?: string): Promise
         : `/bili-download?url=${encodeURIComponent(videoPath)}`;
 
     try {
-        const response = await fetch(proxyUrl, getBaseConfig(sessData));
-        handleResponse(response);
+        const config = {
+            headers: {
+                'User-Agent': `${UA}`,
+                'X-Bili-Sessdata': sessData || ''
+            }
+        };
+
+        const response = await fetch(proxyUrl, config);
 
         // 如果代理返回了重定向地址 (或者 response.url 发生了变化)
         if (response.redirected) {
@@ -78,12 +61,18 @@ export const getAcceptQuality = async (cid: string | number, bvid: string, sessD
     })
 
     const targetUrl = `https://api.bilibili.com/x/player/wbi/playurl?${newApiParams}`;
-    const apiUrl = isProd 
+    const apiUrl = isProd
         ? `/api/download?url=${encodeURIComponent(targetUrl)}`
         : `/bili-api/x/player/wbi/playurl?${newApiParams}`;
 
-    const result = await fetch(apiUrl, getBaseConfig(sessData));
-    handleResponse(result);
+    const config = {
+        headers: {
+            'User-Agent': `${UA}`,
+            'X-Bili-Sessdata': sessData || ''
+        }
+    }
+
+    const result = await fetch(apiUrl, config);
     return await result.json()
 }
 
