@@ -11,6 +11,14 @@ export interface Track {
   url: string;
 }
 
+export const PlayMode = {
+  ListLoop: 'listLoop',
+  SingleLoop: 'singleLoop',
+  Random: 'random'
+} as const;
+
+export type PlayMode = typeof PlayMode[keyof typeof PlayMode];
+
 /**
  * 音频系统类：负责音频上下文管理、分析器设置及播放列表逻辑
  */
@@ -24,6 +32,7 @@ export class AudioSystem {
   public fileName = ref('');
   public playlist = ref<Track[]>([]);
   public currentIndex = ref(-1);
+  public playMode = ref<PlayMode>(PlayMode.ListLoop);
 
   // 进度与音量相关
   public currentTime = ref(0);
@@ -168,7 +177,11 @@ export class AudioSystem {
     this.isPlaying.value = true;
 
     this.audioTag.onended = () => {
-      this.next();
+      if (this.playMode.value === PlayMode.SingleLoop) {
+        this.playTrack(this.currentIndex.value);
+      } else {
+        this.next();
+      }
     };
   }
 
@@ -190,6 +203,23 @@ export class AudioSystem {
     }
 
     this.playlist.value.splice(index, 1);
+  }
+
+  /**
+   * 重命名歌曲
+   */
+  public async renameTrack(id: string, newName: string) {
+    const track = this.playlist.value.find(t => t.id === id);
+    if (!track) return;
+
+    // 更新内存
+    track.name = newName;
+    if (this.currentIndex.value !== -1 && this.playlist.value[this.currentIndex.value].id === id) {
+      this.fileName.value = newName;
+    }
+
+    // 更新数据库
+    await db.music.where('uid').equals(id).modify({ name: newName });
   }
 
   /**
@@ -230,13 +260,32 @@ export class AudioSystem {
 
   public next() {
     if (this.playlist.value.length === 0) return;
-    const nextIndex = (this.currentIndex.value + 1) % this.playlist.value.length;
+    
+    let nextIndex: number;
+    if (this.playMode.value === PlayMode.Random) {
+      nextIndex = Math.floor(Math.random() * this.playlist.value.length);
+      // 如果随机到了当前这一首且列表不止一首，再随机一次
+      if (nextIndex === this.currentIndex.value && this.playlist.value.length > 1) {
+        nextIndex = (nextIndex + 1) % this.playlist.value.length;
+      }
+    } else {
+      nextIndex = (this.currentIndex.value + 1) % this.playlist.value.length;
+    }
     this.playTrack(nextIndex);
   }
 
   public prev() {
     if (this.playlist.value.length === 0) return;
-    const prevIndex = (this.currentIndex.value - 1 + this.playlist.value.length) % this.playlist.value.length;
+    
+    let prevIndex: number;
+    if (this.playMode.value === PlayMode.Random) {
+      prevIndex = Math.floor(Math.random() * this.playlist.value.length);
+      if (prevIndex === this.currentIndex.value && this.playlist.value.length > 1) {
+        prevIndex = (prevIndex + 1) % this.playlist.value.length;
+      }
+    } else {
+      prevIndex = (this.currentIndex.value - 1 + this.playlist.value.length) % this.playlist.value.length;
+    }
     this.playTrack(prevIndex);
   }
 

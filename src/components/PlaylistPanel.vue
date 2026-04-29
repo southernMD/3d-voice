@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, computed } from 'vue';
 import { gsap } from 'gsap';
 import type { AudioSystem } from '@/utils/audioSystem';
 
@@ -15,18 +15,51 @@ const emit = defineEmits<{
 const panel = ref<HTMLElement | null>(null);
 const mask = ref<HTMLElement | null>(null);
 
+// 搜索逻辑
+const searchQuery = ref('');
+const filteredPlaylist = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  if (!query) return props.audio.playlist.value;
+  return props.audio.playlist.value.filter(t => 
+    t.name.toLowerCase().includes(query)
+  );
+});
+
+// 重命名逻辑
+const editingId = ref<string | null>(null);
+const editName = ref('');
+const editInput = ref<HTMLInputElement | null>(null);
+
+const startRename = (id: string, currentName: string) => {
+  editingId.value = id;
+  editName.value = currentName;
+  nextTick(() => {
+    editInput.value?.focus();
+    editInput.value?.select();
+  });
+};
+
+const saveRename = async () => {
+  if (editingId.value && editName.value.trim()) {
+    await props.audio.renameTrack(editingId.value, editName.value.trim());
+  }
+  editingId.value = null;
+};
+
+const cancelRename = () => {
+  editingId.value = null;
+};
+
 // 监听可见性变化，执行动画
 watch(() => props.visible, (newVal) => {
   if (newVal) {
     nextTick(() => {
-      // 面板滑入
       if (panel.value) {
         gsap.fromTo(panel.value, 
           { x: 400, opacity: 0 },
           { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }
         );
       }
-      // 遮罩淡入
       if (mask.value) {
         gsap.fromTo(mask.value,
           { opacity: 0 },
@@ -37,78 +70,92 @@ watch(() => props.visible, (newVal) => {
   }
 });
 
-/**
- * 关闭逻辑：先播放退出动画，再通知父组件
- */
 const close = () => {
   const tl = gsap.timeline({
     onComplete: () => emit('close')
   });
-
   if (panel.value) {
-    tl.to(panel.value, {
-      x: 400,
-      opacity: 0,
-      duration: 0.4,
-      ease: 'power3.in'
-    }, 0);
+    tl.to(panel.value, { x: 400, opacity: 0, duration: 0.4, ease: 'power3.in' }, 0);
   }
-
   if (mask.value) {
-    tl.to(mask.value, {
-      opacity: 0,
-      duration: 0.4
-    }, 0);
+    tl.to(mask.value, { opacity: 0, duration: 0.4 }, 0);
   }
-  
-  if (!panel.value && !mask.value) {
-    emit('close');
-  }
+  if (!panel.value && !mask.value) emit('close');
 };
 </script>
 
 <template>
   <div v-if="visible" class="playlist-wrapper">
-    <!-- 背景遮罩：点击空白处关闭 -->
     <div ref="mask" class="playlist-mask" @click="close"></div>
 
-    <!-- 播放列表面板 -->
-    <!-- 播放列表面板 -->
     <div ref="panel" class="playlist-panel">
       <div class="panel-header">
-        <h2>播放列表</h2>
-        <div class="header-btns">
-          <button v-if="audio.playlist.value.length > 0" class="clear-btn" @click="audio.clearAll()">清空列表</button>
-          <button class="close-btn" @click="close">×</button>
+        <div class="header-top">
+          <h2>播放列表</h2>
+          <div class="header-btns">
+            <button v-if="audio.playlist.value.length > 0" class="clear-btn" @click="audio.clearAll()">清空列表</button>
+            <button class="close-btn" @click="close">
+              <i class="iconfont icon-guanbi_o"></i>
+            </button>
+          </div>
+        </div>
+        <!-- 搜索栏 -->
+        <div class="search-bar">
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            placeholder="搜索音乐..." 
+            class="search-input"
+          />
+          <span v-if="searchQuery" class="search-clear" @click="searchQuery = ''">
+            <i class="iconfont icon-guanbi_o" style="font-size: 0.8rem;"></i>
+          </span>
         </div>
       </div>
       
       <div class="track-list">
         <div 
-          v-for="(track, index) in audio.playlist.value" 
+          v-for="(track, index) in filteredPlaylist" 
           :key="track.id" 
-          :class="['track-item', { active: audio.currentIndex.value === index }]"
-          @click="audio.playTrack(index)"
+          :class="['track-item', { active: audio.currentIndex.value === audio.playlist.value.findIndex(t => t.id === track.id) }]"
+          @click="audio.playTrack(audio.playlist.value.findIndex(t => t.id === track.id))"
         >
-          <div class="track-idx">{{ index + 1 }}</div>
+          <div class="track-idx">{{ audio.playlist.value.findIndex(t => t.id === track.id) + 1 }}</div>
+          
           <div class="track-info">
-            <div class="track-title">{{ track.name }}</div>
+            <input 
+              v-if="editingId === track.id"
+              ref="editInput"
+              v-model="editName"
+              class="edit-input"
+              @blur="saveRename"
+              @keyup.enter="saveRename"
+              @keyup.esc="cancelRename"
+              @click.stop
+            />
+            <div v-else class="track-title">{{ track.name }}</div>
           </div>
           
           <div class="track-actions">
-            <!-- 播放中动画状态 -->
-            <div v-if="audio.currentIndex.value === index && audio.isPlaying.value" class="playing-indicator">
+            <!-- 播放状态 -->
+            <div v-if="audio.currentIndex.value === audio.playlist.value.findIndex(t => t.id === track.id) && audio.isPlaying.value" class="playing-indicator">
               <div class="bar"></div>
               <div class="bar"></div>
               <div class="bar"></div>
             </div>
+            <!-- 重命名按钮 -->
+            <button class="action-btn" @click.stop="startRename(track.id, track.name)" title="重命名">
+              <i class="iconfont icon-bianji"></i>
+            </button>
             <!-- 删除按钮 -->
-            <button class="remove-btn" @click.stop="audio.removeTrack(index)" title="从缓存移除">🗑</button>
+            <button class="action-btn remove" @click.stop="audio.removeTrack(audio.playlist.value.findIndex(t => t.id === track.id))" title="移除">
+              <i class="iconfont icon-lajixiang"></i>
+            </button>
           </div>
         </div>
 
-        <div v-if="audio.playlist.value.length === 0" class="empty-tip">
-          还没有歌曲<br>请点击左下角“添加音乐”
+        <div v-if="filteredPlaylist.length === 0" class="empty-tip">
+          {{ searchQuery ? '没有匹配的音乐' : '还没有歌曲，请添加音乐' }}
         </div>
       </div>
     </div>
@@ -152,25 +199,65 @@ const close = () => {
 }
 
 .panel-header {
-  padding: 0.5rem 1rem;
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.header-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .panel-header h2 {
   margin: 0;
   font-weight: 200;
-  font-size: 1.3rem;
-  letter-spacing: 0.3rem;
+  font-size: 1.2rem;
+  letter-spacing: 0.2rem;
   color: rgba(255, 255, 255, 0.9);
+}
+
+.search-bar {
+  position: relative;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 0.8rem;
+  padding-right: 2rem;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.8rem;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.search-input:focus {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 255, 255, 0.3);
+}
+
+.search-clear {
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  font-size: 1.1rem;
 }
 
 .header-btns {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.8rem;
 }
 
 .clear-btn {
@@ -178,37 +265,26 @@ const close = () => {
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: rgba(255, 255, 255, 0.5);
   font-size: 0.7rem;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.3s;
-}
-
-.clear-btn:hover {
-  background: rgba(255, 50, 50, 0.2);
-  color: #ff5555;
-  border-color: #ff5555;
 }
 
 .close-btn {
   background: none;
   border: none;
   color: white;
-  font-size: 2rem;
+  font-size: 1.5rem;
   cursor: pointer;
   line-height: 1;
   opacity: 0.5;
-  transition: opacity 0.3s;
-}
-
-.close-btn:hover {
-  opacity: 1;
 }
 
 .track-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem 0;
+  padding: 0.4rem 0;
 }
 
 .track-list::-webkit-scrollbar {
@@ -220,13 +296,13 @@ const close = () => {
 }
 
 .track-item {
-  padding: 0.5rem 1rem;
+  padding: 0.8rem 1.2rem;
   display: flex;
   align-items: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  gap: 1.2rem;
-  border-left: 3px solid transparent;
+  gap: 0.8rem;
+  border-left: 2px solid transparent;
 }
 
 .track-item:hover {
@@ -241,8 +317,9 @@ const close = () => {
 .track-idx {
   font-family: 'JetBrains Mono', monospace;
   opacity: 0.3;
-  font-size: 0.8rem;
-  width: 20px;
+  font-size: 0.75rem;
+  width: 18px;
+  flex-shrink: 0;
 }
 
 .track-info {
@@ -251,7 +328,7 @@ const close = () => {
 }
 
 .track-title {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -259,43 +336,54 @@ const close = () => {
   color: rgba(255, 255, 255, 0.8);
 }
 
-.track-item.active .track-title {
-  color: #00ffff;
-  font-weight: 500;
+.edit-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #00ffff;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  outline: none;
 }
 
 .track-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.remove-btn {
+.action-btn {
   background: none;
   border: none;
   color: white;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   cursor: pointer;
   opacity: 0;
-  transform: scale(0.8);
   transition: all 0.2s;
+  padding: 4px;
 }
 
-.track-item:hover .remove-btn {
+.track-item:hover .action-btn {
   opacity: 0.4;
-  transform: scale(1);
 }
 
-.remove-btn:hover {
+.action-btn:hover {
   opacity: 1 !important;
+  color: #00ffff;
+}
+
+.action-btn.remove:hover {
   color: #ff5555;
 }
 
 .playing-indicator {
   display: flex;
   align-items: flex-end;
-  gap: 3px;
-  height: 14px;
+  gap: 2px;
+  height: 12px;
 }
 
 .playing-indicator .bar {

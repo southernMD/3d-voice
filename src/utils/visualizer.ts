@@ -47,6 +47,10 @@ export class Visualizer {
     this.controls.minDistance = 5;
     this.controls.maxPolarAngle = Math.PI / 2; // 限制不能看到地板下方
     this.controls.enablePan = false; // 禁用平移，只允许旋转和缩放
+    
+    // 启用自动旋转
+    this.controls.autoRotate = true;
+    this.controls.autoRotateSpeed = 0.8; // 较慢的转速，提供电影感
 
     // 5. 灯光系统
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
