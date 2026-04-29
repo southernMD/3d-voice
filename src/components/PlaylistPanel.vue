@@ -115,7 +115,7 @@ const close = () => {
       
       <div class="track-list">
         <div 
-          v-for="(track, index) in filteredPlaylist" 
+          v-for="(track) in filteredPlaylist" 
           :key="track.id" 
           :class="['track-item', { active: audio.currentIndex.value === audio.playlist.value.findIndex(t => t.id === track.id) }]"
           @click="audio.playTrack(audio.playlist.value.findIndex(t => t.id === track.id))"
