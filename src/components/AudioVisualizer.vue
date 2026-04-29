@@ -115,6 +115,26 @@ const handleBilibiliImport = async () => {
     alert('导入失败，请检查链接有效性或 CORS 限制。');
   }
 };
+
+const isFullscreen = ref(false);
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(err => {
+      console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+    });
+    isFullscreen.value = true;
+  } else {
+    document.exitFullscreen();
+    isFullscreen.value = false;
+  }
+};
+
+// 监听全屏变化
+onMounted(() => {
+  document.addEventListener('fullscreenchange', () => {
+    isFullscreen.value = !!document.fullscreenElement;
+  });
+});
 </script>
 
 <template>
@@ -127,11 +147,18 @@ const handleBilibiliImport = async () => {
       <div class="branding">
         <h1>3D 沉浸式频谱</h1>
       </div>
-      <div class="current-track" v-if="audio.fileName.value">
-        <span class="music-icon">
-          <i class="iconfont icon-yinle"></i>
-        </span>
-        <span class="track-name">{{ audio.fileName.value }}</span>
+      
+      <div class="top-actions">
+        <div class="current-track" v-if="audio.fileName.value">
+          <span class="music-icon">
+            <i class="iconfont icon-yinle"></i>
+          </span>
+          <span class="track-name">{{ audio.fileName.value }}</span>
+        </div>
+
+        <button class="fullscreen-btn glass" @click="toggleFullscreen">
+          <span style="font-size: 0.75em;">{{ isFullscreen? '取消' : '全屏' }}</span>
+        </button>
       </div>
     </div>
 
@@ -209,6 +236,13 @@ const handleBilibiliImport = async () => {
   color: rgba(255, 255, 255, 0.7);
 }
 
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  pointer-events: auto;
+}
+
 .current-track {
   display: flex;
   align-items: center;
@@ -218,7 +252,22 @@ const handleBilibiliImport = async () => {
   padding: 0.8rem 1.5rem;
   border-radius: 50px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  pointer-events: auto;
+}
+
+.fullscreen-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 0;
+  transition: all 0.3s ease;
+}
+
+.fullscreen-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
 }
 
 .track-name {
