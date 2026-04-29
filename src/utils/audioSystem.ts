@@ -172,7 +172,9 @@ export class AudioSystem {
       ? `/api/download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`
       : `/bili-download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`;
 
-    const response = await fetch(fetchUrl);
+    const response = await fetch(fetchUrl, {
+      headers: sessData ? { 'X-Bili-Sessdata': sessData } : {}
+    });
 
     if (!response.ok) throw new Error('下载音频流失败，Referer 校验未通过');
     const blob = await response.blob();

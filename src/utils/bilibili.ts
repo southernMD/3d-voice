@@ -15,6 +15,7 @@ export const getVideoMsg = async (videoPath: string, sessData?: string): Promise
         const config = {
             headers: {
                 'User-Agent': `${UA}`,
+                'X-Bili-Sessdata': sessData || ''
             }
         };
 
@@ -45,7 +46,12 @@ export const getVideoMsg = async (videoPath: string, sessData?: string): Promise
  * 获取视频清晰度列表 (直接迁移自 info/dowloadBiliBili.ts)
  */
 export const getAcceptQuality = async (cid: string | number, bvid: string, sessData?: string) => {
-    const isProd = import.meta.env.PROD;
+    const config = {
+        headers: {
+            'User-Agent': `${UA}`,
+            'X-Bili-Sessdata': sessData || ''
+        }
+    }
     const newApiParams = await WBI(sessData, {
         cid: `${cid}`,
         bvid: `${bvid}`,
@@ -59,21 +65,7 @@ export const getAcceptQuality = async (cid: string | number, bvid: string, sessD
         gaia_source: `${sessData}`
     })
 
-    const targetUrl = `https://api.bilibili.com/x/player/wbi/playurl?${newApiParams}`;
-    const refererUrl = `https://www.bilibili.com/video/${bvid}`;
-
-    const apiUrl = isProd
-        ? `/api/download?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent(refererUrl)}`
-        : `/bili-api/x/player/wbi/playurl?${newApiParams}`;
-
-    const config = {
-        headers: {
-            'User-Agent': `${UA}`,
-        },
-        responseType: 'json'
-    }
-
-    const result = await fetch(apiUrl, config);
+    const result = await fetch(`/bili-api/x/player/wbi/playurl?${newApiParams}`, config);
     return await result.json()
 }
 

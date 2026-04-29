@@ -37,6 +37,7 @@ function encWbi(params: any, img_key: any, sub_key: any) {
 async function getWbiKeys(SESSDATA?: string) {
   const res = await fetch('/bili-api/x/web-interface/nav', {
     headers: {
+      'X-Bili-Sessdata': SESSDATA || '',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
     }
   })
