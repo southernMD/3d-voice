@@ -102,28 +102,20 @@ const onProgressClick = (e: MouseEvent) => {
   audio.seek(percentage * audio.duration.value);
 };
 const handleBilibiliImport = async () => {
-  const input = prompt('请输入 Bilibili 视频链接或分享文字');
-  if (!input) return;
+  const url = prompt('请输入 Bilibili 视频链接 (如: https://www.bilibili.com/video/BV...)');
+  if (!url) return;
 
-  // 正则匹配 bilibili.com 或 b23.tv 链接
-  const urlRegex = /(https?:\/\/(?:www\.)?bilibili\.com\/video\/[a-zA-Z0-9]+|https?:\/\/b23\.tv\/[a-zA-Z0-9]+)/;
-  const match = input.match(urlRegex);
-  
-  if (!match) {
-    alert('未识别到有效的 B 站链接');
-    return;
-  }
-
-  const url = match[0];
-  
   try {
+    // 提示：SESSDATA 可以从浏览器 Cookie 中手动获取并填入，这里暂时传空
+    // 如果需要高画质/登录特权，可以再加个设置项输入 SESSDATA
     const track = await audio.addBiliTrack(url);
     alert(`成功添加：${track.name}`);
   } catch (err) {
     console.error('导入 B 站音频失败:', err);
-    alert('导入失败，请检查链接有效性或网络限制。');
+    alert('导入失败，请检查链接有效性或 CORS 限制。');
   }
 };
+
 const isFullscreen = ref(false);
 const toggleFullscreen = () => {
   if (!document.fullscreenElement) {
@@ -363,8 +355,9 @@ onMounted(() => {
 }
 /* 移动端适配 */
 @media (max-width: 768px) {
-  .branding {
-    display: none;
+  .branding h1 {
+    font-size: 1.1rem;
+    letter-spacing: 0.2rem;
   }
   
   .top-bar {

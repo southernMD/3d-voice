@@ -6,24 +6,17 @@ export default async function handler(req: Request) {
   const url = new URL(req.url);
   const targetUrl = url.searchParams.get('url');
   const referer = url.searchParams.get('referer') || 'https://www.bilibili.com';
-  const sessData = req.headers.get('X-Bili-Sessdata') || process.env.BILI_SESSDATA;
-
+  
   if (!targetUrl) {
     return new Response('Missing target url', { status: 400 });
   }
 
-  const requestHeaders: Record<string, string> = {
-    'Referer': referer,
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  };
-
-  if (sessData) {
-    requestHeaders['Cookie'] = `SESSDATA=${sessData}`;
-  }
-
   try {
     const response = await fetch(targetUrl, {
-      headers: requestHeaders,
+      headers: {
+        'Referer': referer,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
     });
 
     const newHeaders = new Headers(response.headers);

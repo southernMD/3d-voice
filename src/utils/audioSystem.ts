@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 import { db } from './db';
-import { getVideoMsg, getVideoDowloadLink } from './bilibili';
+import { parseBilibiliUrl, getVideoMsg, getVideoDowloadLink } from './bilibili';
 
 /**
  * 音乐轨道接口
@@ -140,24 +140,13 @@ export class AudioSystem {
    * 通过 B 站链接添加歌曲
    */
   public async addBiliTrack(url: string, sessData?: string) {
-    // 1. 获取视频信息 (HTML 解析版本)
-    const info = await getVideoMsg(url, sessData);
-    const bvid = info.bvid;
+    const bvid = parseBilibiliUrl(url);
+    if (!bvid) throw new Error('无效的 B 站链接');
 
-    let cid = info.cid;
-    let title = info.title;
-
-    // 2. 多 P 手动选择 (参考 info/dowloadBiliBili.ts 的 choice 逻辑)
-    if (info.pages && info.pages.length > 1) {
-      const pageList = info.pages.map((p: any, i: number) => `${i + 1}: ${p.part}`).join('\n');
-      const choice = prompt(`检测到多 P 视频，请输入要下载的 P 数 (1-${info.pages.length}):\n\n${pageList}`, '1');
-
-      const pIndex = choice ? parseInt(choice) - 1 : 0;
-      if (info.pages[pIndex]) {
-        cid = info.pages[pIndex].cid;
-        title = `${info.title} - ${info.pages[pIndex].part}`;
-      }
-    }
+    // 1. 获取视频信息
+    const info = await getVideoMsg(bvid);
+    const title = info.title;
+    const cid = info.cid;
 
     // 2. 获取播放链接数据 (注意顺序：cid, bvid)
     const downloadData = await getVideoDowloadLink(cid, bvid, sessData);
