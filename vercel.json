@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/bili-api/(.*)",
+      "destination": "/api/proxy?path=$1"
+    },
+    {
+      "source": "/bili-img/(.*)",
+      "destination": "/api/proxy-img?path=$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
