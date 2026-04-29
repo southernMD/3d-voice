@@ -101,6 +101,20 @@ const onProgressClick = (e: MouseEvent) => {
   const percentage = x / rect.width;
   audio.seek(percentage * audio.duration.value);
 };
+const handleBilibiliImport = async () => {
+  const url = prompt('请输入 Bilibili 视频链接 (如: https://www.bilibili.com/video/BV...)');
+  if (!url) return;
+
+  try {
+    // 提示：SESSDATA 可以从浏览器 Cookie 中手动获取并填入，这里暂时传空
+    // 如果需要高画质/登录特权，可以再加个设置项输入 SESSDATA
+    const track = await audio.addBiliTrack(url);
+    alert(`成功添加：${track.name}`);
+  } catch (err) {
+    console.error('导入 B 站音频失败:', err);
+    alert('导入失败，请检查链接有效性或 CORS 限制。');
+  }
+};
 </script>
 
 <template>
@@ -137,6 +151,10 @@ const onProgressClick = (e: MouseEvent) => {
       <ControlRow :audio="audio" />
 
       <div class="action-btns">
+        <button class="btn glass" @click="handleBilibiliImport">
+          <i class="iconfont icon-yinle" style="margin-right: 5px;"></i>
+          B站链接
+        </button>
         <button class="btn glass" @click="handleFileUpload">
           <i class="iconfont icon-tianjiawenjian" style="margin-right: 5px;"></i>
           添加音乐

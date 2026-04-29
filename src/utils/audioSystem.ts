@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import { db } from './db';
+import { parseBilibiliUrl, getVideoInfo, getPlayUrl } from './bilibili';
 
 /**
  * 音乐轨道接口
@@ -27,7 +28,7 @@ export class AudioSystem {
   public analyser: AnalyserNode | null = null;
   public audioTag: HTMLAudioElement | null = null;
   public dataArray: Uint8Array | null = null;
-  
+
   public isPlaying = ref(false);
   public fileName = ref('');
   public playlist = ref<Track[]>([]);
@@ -67,7 +68,7 @@ export class AudioSystem {
       this.audioContext = new AudioContext();
       this.analyser = this.audioContext.createAnalyser();
       this.analyser.fftSize = 512;
-      
+
       const bufferLength = this.analyser.frequencyBinCount;
       this.dataArray = new Uint8Array(bufferLength);
     }
@@ -101,7 +102,7 @@ export class AudioSystem {
       const isValid = await this.validateAudio(file);
       if (isValid) {
         const uid = Math.random().toString(36).substring(2, 9);
-        
+
         // 显式转换为 Blob 存储，丢弃 File 特有的 metadata（如 lastModified）
         const pureBlob = new Blob([file], { type: file.type });
 
@@ -133,6 +134,49 @@ export class AudioSystem {
         this.playTrack(this.playlist.value.length - validTracks.length);
       }
     }
+  }
+
+  /**
+   * 通过 B 站链接添加歌曲
+   */
+  public async addBiliTrack(url: string, sessData?: string) {
+    const bvid = parseBilibiliUrl(url);
+    if (!bvid) throw new Error('无效的 B 站链接');
+
+    // 1. 获取视频信息
+    const info = await getVideoInfo(bvid);
+    const title = info.title;
+    const cid = info.cid;
+
+    // 2. 获取 DASH 播放地址
+    const playData = await getPlayUrl(bvid, cid, sessData);
+
+    // 优先选择音质最好的轨道
+    const audioUrl = playData.dash.audio[0].base_url || playData.dash.audio[0].baseUrl;
+    if (!audioUrl) throw new Error('未找到有效的音频轨道');
+
+    // 3. 下载音频 Blob
+    const response = await fetch(audioUrl);
+    if (!response.ok) throw new Error('下载音频流失败，可能存在跨域限制');
+    const blob = await response.blob();
+
+    // 4. 存入数据库和列表
+    const id = `bili-${Date.now()}`;
+    await db.music.add({
+      uid: id,
+      name: title,
+      data: blob,
+    });
+
+    const track: Track = {
+      id,
+      name: title,
+      blob,
+      url: URL.createObjectURL(blob)
+    };
+
+    this.playlist.value.push(track);
+    return track;
   }
 
   /**
@@ -173,7 +217,7 @@ export class AudioSystem {
       console.error('播放失败:', err);
       this.isPlaying.value = false;
     });
-    
+
     this.isPlaying.value = true;
 
     this.audioTag.onended = () => {
@@ -253,14 +297,14 @@ export class AudioSystem {
       this.audioTag.pause();
     } else {
       this.audioContext?.resume();
-      this.audioTag.play().catch(() => {});
+      this.audioTag.play().catch(() => { });
     }
     this.isPlaying.value = !this.isPlaying.value;
   }
 
   public next() {
     if (this.playlist.value.length === 0) return;
-    
+
     let nextIndex: number;
     if (this.playMode.value === PlayMode.Random) {
       nextIndex = Math.floor(Math.random() * this.playlist.value.length);
@@ -276,7 +320,7 @@ export class AudioSystem {
 
   public prev() {
     if (this.playlist.value.length === 0) return;
-    
+
     let prevIndex: number;
     if (this.playMode.value === PlayMode.Random) {
       prevIndex = Math.floor(Math.random() * this.playlist.value.length);
