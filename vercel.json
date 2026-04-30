@@ -9,6 +9,10 @@
       "destination": "/api/gdstudio?path=$1"
     },
     {
+      "source": "/bili-api/(.*)",
+      "destination": "/api/bili?path=$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }
