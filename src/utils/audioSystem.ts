@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { db } from './db';
 import { getVideoMsg, getVideoDowloadLink } from './bilibili';
+import { getNeteaseMusicMsg } from './netease';
 
 /**
  * 音乐轨道接口
@@ -98,12 +99,9 @@ export class AudioSystem {
     const invalidFiles: string[] = [];
 
     for (const file of files) {
-      // File 本身就是 Blob，我们可以直接用它验证
       const isValid = await this.validateAudio(file);
       if (isValid) {
         const uid = Math.random().toString(36).substring(2, 9);
-
-        // 显式转换为 Blob 存储，丢弃 File 特有的 metadata（如 lastModified）
         const pureBlob = new Blob([file], { type: file.type });
 
         validTracks.push({
@@ -113,7 +111,6 @@ export class AudioSystem {
           url: URL.createObjectURL(pureBlob)
         });
 
-        // 存入数据库
         await db.music.add({
           uid: uid,
           name: file.name,
@@ -140,23 +137,19 @@ export class AudioSystem {
    * 通过 B 站链接添加歌曲
    */
   public async addBiliTrack(url: string, sessData?: string) {
-    // 1. 获取视频信息 (直接传入原始链接，让 getVideoMsg 处理短链解析)
     const info = await getVideoMsg(url, sessData);
     if (!info) throw new Error('无法获取视频信息');
 
     const title = info.title;
     const cid = info.cid;
-    const bvid = info.bvid; // 从返回的信息中直接获取真实的 BVID
+    const bvid = info.bvid;
 
-    // 2. 获取播放链接数据
     const downloadData = await getVideoDowloadLink(cid, bvid, sessData);
     const audioUrl = downloadData.audio.base_url || downloadData.audio.baseUrl;
     if (!audioUrl) throw new Error('未找到有效的音频轨道');
 
-    // 3. 下载音频 Blob (核心重现：对应 info/dowloadBiliBili.ts 的 downloadFile 逻辑)
-    // 浏览器环境必须通过代理设置 Referer
     const isProd = import.meta.env.PROD;
-    const referer = `https://www.bilibili.com/video/${bvid}`; // 对应脚本中的 webUrl
+    const referer = `https://www.bilibili.com/video/${bvid}`;
     const fetchUrl = isProd
       ? `/api/download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`
       : `/bili-download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`;
@@ -168,7 +161,6 @@ export class AudioSystem {
     if (!response.ok) throw new Error('下载音频流失败，Referer 校验未通过');
     const blob = await response.blob();
 
-    // 4. 存入数据库和列表
     const id = `bili-${Date.now()}`;
     await db.music.add({
       uid: id,
@@ -184,6 +176,44 @@ export class AudioSystem {
     };
 
     this.playlist.value.push(track);
+    if (this.currentIndex.value === -1) {
+      this.playTrack(this.playlist.value.length - 1);
+    }
+    return track;
+  }
+
+  /**
+   * 通过网易云音乐链接添加歌曲
+   */
+  public async addNeteaseTrack(url: string) {
+    // 1. 获取网易云音乐详情 (现在内部处理 URL 解析)
+    const info = await getNeteaseMusicMsg(url);
+    if (!info) throw new Error('无法获取歌曲信息');
+
+    // 2. 下载音频 Blob
+    const response = await fetch(info.url);
+    if (!response.ok) throw new Error('下载音频失败，该歌曲可能受版权保护或为 VIP 歌曲');
+    const blob = await response.blob();
+
+    // 3. 存入数据库和列表
+    const uid = `netease-${Date.now()}`;
+    await db.music.add({
+      uid,
+      name: `${info.name} - ${info.artist}`,
+      data: blob,
+    });
+
+    const track: Track = {
+      id: uid,
+      name: `${info.name} - ${info.artist}`,
+      blob,
+      url: URL.createObjectURL(blob)
+    };
+
+    this.playlist.value.push(track);
+    if (this.currentIndex.value === -1) {
+      this.playTrack(this.playlist.value.length - 1);
+    }
     return track;
   }
 
@@ -205,7 +235,6 @@ export class AudioSystem {
     this.audioTag.crossOrigin = "anonymous";
     this.audioTag.volume = this.volume.value;
 
-    // 连接节点
     const sourceNode = this.audioContext!.createMediaElementSource(this.audioTag);
     sourceNode.connect(this.analyser!);
     this.analyser!.connect(this.audioContext!.destination);
@@ -264,13 +293,11 @@ export class AudioSystem {
     const track = this.playlist.value.find(t => t.id === id);
     if (!track) return;
 
-    // 更新内存
     track.name = newName;
     if (this.currentIndex.value !== -1 && this.playlist.value[this.currentIndex.value].id === id) {
       this.fileName.value = newName;
     }
 
-    // 更新数据库
     await db.music.where('uid').equals(id).modify({ name: newName });
   }
 
@@ -316,7 +343,6 @@ export class AudioSystem {
     let nextIndex: number;
     if (this.playMode.value === PlayMode.Random) {
       nextIndex = Math.floor(Math.random() * this.playlist.value.length);
-      // 如果随机到了当前这一首且列表不止一首，再随机一次
       if (nextIndex === this.currentIndex.value && this.playlist.value.length > 1) {
         nextIndex = (nextIndex + 1) % this.playlist.value.length;
       }

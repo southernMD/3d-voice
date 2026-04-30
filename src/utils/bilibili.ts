@@ -18,7 +18,7 @@ export const getVideoMsg = async (videoPath: string, sessData?: string) => {
     // 0. 从杂乱的分享字符串中提取真正的 URL
     const urlRegex = /(https?:\/\/[^\s]+)/;
     const urlMatch = videoPath.match(urlRegex);
-    
+
     if (!urlMatch) {
         throw new Error('未在输入中找到有效的 B 站链接');
     }
@@ -29,10 +29,10 @@ export const getVideoMsg = async (videoPath: string, sessData?: string) => {
     if (finalPath.includes('b23.tv/')) {
         try {
             // 使用相对路径，由 Vite (开发) 或 Vercel (生产) 代理转发
-            const res = await fetch(`/b23-api/resolve?url=${encodeURIComponent(finalPath)}`);
+            const res = await fetch(`/music-api/resolve/bilibili?url=${encodeURIComponent(finalPath)}`);
             const json = await res.json();
-            if (json.success && json.data.longUrl) {
-                finalPath = json.data.longUrl;
+            if (json.success && json.data.resolved) {
+                finalPath = json.data.resolved;
             }
         } catch (e) {
             console.error('解析短链失败:', e);

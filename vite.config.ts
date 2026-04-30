@@ -1,58 +1,55 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
-import { fileURLToPath, URL } from 'node:url';
 import vue from '@vitejs/plugin-vue'
+import { IncomingMessage } from 'http'
 
-// 自定义 B 站下载代理插件
+// 自定义插件：用于开发环境拦截并代理 bilibili 视频下载流
 const biliProxyPlugin = () => ({
-  name: 'bili-proxy',
+  name: 'bili-download-proxy',
   configureServer(server: any) {
-    server.middlewares.use(async (req: any, res: any, next: any) => {
+    server.middlewares.use(async (req: IncomingMessage, res: any, next: any) => {
       if (req.url?.startsWith('/bili-download')) {
-        const url = new URL(req.url, `http://${req.headers.host}`);
-        const targetUrl = url.searchParams.get('url');
-        const referer = url.searchParams.get('referer');
-        const sessData = req.headers['x-bili-sessdata'];
+        const urlObj = new URL(req.url, `http://${req.headers.host}`);
+        const targetUrl = urlObj.searchParams.get('url');
+        const referer = urlObj.searchParams.get('referer');
+        const sessData = req.headers['x-bili-sessdata'] as string;
 
-        if (!targetUrl) return next();
+        if (!targetUrl) {
+          res.statusCode = 400;
+          res.end('Missing target url');
+          return;
+        }
 
         try {
-          const response = await fetch(targetUrl, {
+          const fetchRes = await fetch(targetUrl, {
             headers: {
               'Referer': referer || 'https://www.bilibili.com',
-              'User-Agent': 'Mozilla/5.0',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               'Cookie': sessData ? `SESSDATA=${sessData}` : ''
             }
           });
 
-          res.writeHead(response.status, {
-            'Content-Type': response.headers.get('Content-Type') || 'audio/mpeg',
-            'Access-Control-Allow-Origin': '*',
-          });
+          res.setHeader('Content-Type', fetchRes.headers.get('Content-Type') || 'application/octet-stream');
+          res.setHeader('Access-Control-Allow-Origin', '*');
 
-          if (response.body) {
-            const reader = response.body.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              res.write(Buffer.from(value));
-            }
-          }
-          res.end();
-        } catch (e) {
+          const arrayBuffer = await fetchRes.arrayBuffer();
+          res.end(Buffer.from(arrayBuffer));
+        } catch (err) {
           res.statusCode = 500;
-          res.end('Proxy Error');
+          res.end(String(err));
         }
-        return;
+      } else {
+        next();
       }
-      next();
     });
   }
 });
 
+// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), '');
-  const b23ResolveTarget = env.B23_RESOLVE_API || 'http://localhost:3000';
+  const musicResolveTarget = env.B23_RESOLVE_API || 'http://localhost:3000';
 
   return {
     plugins: [vue(), biliProxyPlugin()],
@@ -63,11 +60,21 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
-        // 代理短链解析接口，目标地址从环境变量读取
-        '/b23-api': {
-          target: b23ResolveTarget,
+        // 代理解析接口，支持 Bilibili 和网易云
+        '/music-api': {
+          target: musicResolveTarget,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/b23-api/, '')
+          rewrite: (path) => path.replace(/^\/music-api/, '')
+        },
+        // 代理第三方网易云下载接口
+        '/gdstudio-api': {
+          target: 'https://music-api.gdstudio.xyz',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/gdstudio-api/, ''),
+          headers: {
+            'Referer': 'https://music-api.gdstudio.xyz',
+            'Origin': 'https://music-api.gdstudio.xyz'
+          }
         },
         '/bili-api': {
           target: 'https://api.bilibili.com',
@@ -77,16 +84,8 @@ export default defineConfig(({ mode }) => {
             'Referer': 'https://www.bilibili.com',
             'Origin': 'https://www.bilibili.com'
           }
-        },
-        '/bili-img': {
-          target: 'https://i0.hdslb.com',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/bili-img/, ''),
-          headers: {
-            'Referer': 'https://www.bilibili.com'
-          }
         }
       }
     }
-  };
-});
+  }
+})

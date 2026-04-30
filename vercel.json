@@ -1,20 +1,16 @@
 {
   "rewrites": [
     {
-      "source": "/b23-api/(.*)",
-      "destination": "/api/resolve"
+      "source": "/music-api/(.*)",
+      "destination": "/api/resolve?path=$1"
     },
     {
-      "source": "/bili-api/(.*)",
-      "destination": "/api/proxy?path=$1"
-    },
-    {
-      "source": "/bili-img/(.*)",
-      "destination": "/api/proxy-img?path=$1"
+      "source": "/gdstudio-api/(.*)",
+      "destination": "/api/gdstudio?path=$1"
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/"
     }
   ]
 }

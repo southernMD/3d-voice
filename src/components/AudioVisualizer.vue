@@ -101,18 +101,30 @@ const onProgressClick = (e: MouseEvent) => {
   const percentage = x / rect.width;
   audio.seek(percentage * audio.duration.value);
 };
+
 const handleBilibiliImport = async () => {
   const url = prompt('请输入 Bilibili 视频链接 (如: https://www.bilibili.com/video/BV...)');
   if (!url) return;
 
   try {
-    // 提示：SESSDATA 可以从浏览器 Cookie 中手动获取并填入，这里暂时传空
-    // 如果需要高画质/登录特权，可以再加个设置项输入 SESSDATA
     const track = await audio.addBiliTrack(url);
     alert(`成功添加：${track.name}`);
   } catch (err) {
     console.error('导入 B 站音频失败:', err);
     alert('导入失败，请检查链接有效性或 CORS 限制。');
+  }
+};
+
+const handleNeteaseImport = async () => {
+  const url = prompt('请输入网易云音乐链接 (如: https://music.163.com/#/song?id=...)');
+  if (!url) return;
+
+  try {
+    const track = await audio.addNeteaseTrack(url);
+    alert(`成功添加：${track.name}`);
+  } catch (err) {
+    console.error('导入网易云音乐失败:', err);
+    alert('导入失败，该歌曲可能受版权保护或链接无效。');
   }
 };
 
@@ -145,7 +157,7 @@ onMounted(() => {
     
     <div class="top-bar">
       <div class="branding">
-        <h1>3D 沉浸式频谱</h1>
+        <h1 class="main-title">3D 沉浸式频谱</h1>
       </div>
       
       <div class="top-actions">
@@ -182,13 +194,17 @@ onMounted(() => {
           <i class="iconfont icon-yinle" style="margin-right: 5px;"></i>
           B站链接
         </button>
+        <button class="btn glass" @click="handleNeteaseImport">
+          <i class="iconfont icon-yinle" style="margin-right: 5px;"></i>
+          网易云
+        </button>
         <button class="btn glass" @click="handleFileUpload">
           <i class="iconfont icon-tianjiawenjian" style="margin-right: 5px;"></i>
-          添加音乐
+          本地文件
         </button>
-        <button class="btn glass" @click="playlistVisible = true">
+        <button class="btn glass playlist-btn" @click="playlistVisible = true">
           <i class="iconfont icon-24gf-playlist" style="margin-right: 5px;"></i>
-          播放列表 ({{ audio.playlist.value.length }})
+          列表 ({{ audio.playlist.value.length }})
         </button>
       </div>
     </div>
@@ -353,11 +369,11 @@ onMounted(() => {
   cursor: pointer;
   font-size: 0.8rem;
 }
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .branding h1 {
-    font-size: 1.1rem;
-    letter-spacing: 0.2rem;
+    display: none;
   }
   
   .top-bar {
@@ -392,10 +408,12 @@ onMounted(() => {
   .action-btns {
     width: 100%;
     justify-content: center;
+    flex-wrap: wrap; /* 按钮过多时换行 */
   }
 
   .btn.glass {
     flex: 1;
+    min-width: 80px;
     text-align: center;
     padding: 0.5rem;
   }
