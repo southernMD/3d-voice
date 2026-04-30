@@ -118,7 +118,7 @@ const close = () => {
           v-for="(track) in filteredPlaylist" 
           :key="track.id" 
           :class="['track-item', { active: audio.currentIndex.value === audio.playlist.value.findIndex(t => t.id === track.id) }]"
-          @click="audio.playTrack(audio.playlist.value.findIndex(t => t.id === track.id))"
+          @click="editingId !== track.id && audio.playTrack(audio.playlist.value.findIndex(t => t.id === track.id))"
         >
           <div class="track-idx">{{ audio.playlist.value.findIndex(t => t.id === track.id) + 1 }}</div>
           
