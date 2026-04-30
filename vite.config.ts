@@ -1,8 +1,8 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import { fileURLToPath, URL } from 'node:url';
 import vue from '@vitejs/plugin-vue'
 
-// 自定义 B 站下载代理插件，解决动态域名和 Referer 问题
+// 自定义 B 站下载代理插件
 const biliProxyPlugin = () => ({
   name: 'bili-proxy',
   configureServer(server: any) {
@@ -49,43 +49,44 @@ const biliProxyPlugin = () => ({
   }
 });
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [vue(), biliProxyPlugin()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
-  server: {
-    proxy: {
-      // 代理 B 站 API
-      '/bili-api': {
-        target: 'https://api.bilibili.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/bili-api/, ''),
-        headers: {
-          'Referer': 'https://www.bilibili.com',
-          'Origin': 'https://www.bilibili.com'
-        },
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req) => {
-            const sessData = req.headers['x-bili-sessdata'];
-            if (sessData) {
-              proxyReq.setHeader('Cookie', `SESSDATA=${sessData}`);
-            }
-          });
-        }
+export default defineConfig(({ mode }) => {
+  // 加载环境变量
+  const env = loadEnv(mode, process.cwd(), '');
+  const b23ResolveTarget = env.B23_RESOLVE_API || 'http://localhost:3000';
+
+  return {
+    plugins: [vue(), biliProxyPlugin()],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
       },
-      // 代理 B 站封面
-      '/bili-img': {
-        target: 'https://i0.hdslb.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/bili-img/, ''),
-        headers: {
-          'Referer': 'https://www.bilibili.com'
+    },
+    server: {
+      proxy: {
+        // 代理短链解析接口，目标地址从环境变量读取
+        '/b23-api': {
+          target: b23ResolveTarget,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/b23-api/, '')
+        },
+        '/bili-api': {
+          target: 'https://api.bilibili.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/bili-api/, ''),
+          headers: {
+            'Referer': 'https://www.bilibili.com',
+            'Origin': 'https://www.bilibili.com'
+          }
+        },
+        '/bili-img': {
+          target: 'https://i0.hdslb.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/bili-img/, ''),
+          headers: {
+            'Referer': 'https://www.bilibili.com'
+          }
         }
       }
     }
-  }
-})
+  };
+});

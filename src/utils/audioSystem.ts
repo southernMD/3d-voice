@@ -140,15 +140,15 @@ export class AudioSystem {
    * 通过 B 站链接添加歌曲
    */
   public async addBiliTrack(url: string, sessData?: string) {
-    const bvid = parseBilibiliUrl(url);
-    if (!bvid) throw new Error('无效的 B 站链接');
-
-    // 1. 获取视频信息
-    const info = await getVideoMsg(bvid);
+    // 1. 获取视频信息 (直接传入原始链接，让 getVideoMsg 处理短链解析)
+    const info = await getVideoMsg(url, sessData);
+    if (!info) throw new Error('无法获取视频信息');
+    
     const title = info.title;
     const cid = info.cid;
+    const bvid = info.bvid; // 从返回的信息中直接获取真实的 BVID
 
-    // 2. 获取播放链接数据 (注意顺序：cid, bvid)
+    // 2. 获取播放链接数据
     const downloadData = await getVideoDowloadLink(cid, bvid, sessData);
     const audioUrl = downloadData.audio.base_url || downloadData.audio.baseUrl;
     if (!audioUrl) throw new Error('未找到有效的音频轨道');

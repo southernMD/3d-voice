@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/b23-api/(.*)",
+      "destination": "/api/resolve"
+    },
+    {
       "source": "/bili-api/(.*)",
       "destination": "/api/proxy?path=$1"
     },

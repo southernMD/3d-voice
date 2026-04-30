@@ -15,7 +15,23 @@ export function parseBilibiliUrl(url: string): string | null {
  * 获取视频信息 (迁移自 info/dowloadBiliBili.ts)
  */
 export const getVideoMsg = async (videoPath: string, sessData?: string) => {
-    const bvid = parseBilibiliUrl(videoPath);
+    let finalPath = videoPath;
+
+    // 1. 识别并解析 b23.tv 短链接
+    if (videoPath.includes('b23.tv/')) {
+        try {
+            // 使用相对路径，由 Vite (开发) 或 Vercel (生产) 代理转发
+            const res = await fetch(`/b23-api/resolve?url=${encodeURIComponent(videoPath)}`);
+            const json = await res.json();
+            if (json.success && json.data.longUrl) {
+                finalPath = json.data.longUrl;
+            }
+        } catch (e) {
+            console.error('解析短链失败:', e);
+        }
+    }
+
+    const bvid = parseBilibiliUrl(finalPath);
     if (!bvid) throw new Error('无效的 B 站链接');
 
     const config = {
