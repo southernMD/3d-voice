@@ -33,9 +33,9 @@ const togglePlayMode = () => {
 
 const playModeIcon = computed(() => {
   switch (props.audio.playMode.value) {
-    case PlayMode.ListLoop: return 'icon-xunhuanbofang';
+    case PlayMode.ListLoop: return 'icon-caozuo-xunhuan1';
     case PlayMode.SingleLoop: return 'icon-danquxunhuan';
-    case PlayMode.Random: return 'icon-caozuo-xunhuan1';
+    case PlayMode.Random: return 'icon-xunhuanbofang';
     default: return 'icon-xunhuanbofang';
   }
 });
