@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 import { db } from './db';
-import { parseBilibiliUrl, getVideoMsg, getVideoDowloadLink } from './bilibili';
+import { getVideoMsg, getVideoDowloadLink } from './bilibili';
 
 /**
  * 音乐轨道接口
@@ -143,7 +143,7 @@ export class AudioSystem {
     // 1. 获取视频信息 (直接传入原始链接，让 getVideoMsg 处理短链解析)
     const info = await getVideoMsg(url, sessData);
     if (!info) throw new Error('无法获取视频信息');
-    
+
     const title = info.title;
     const cid = info.cid;
     const bvid = info.bvid; // 从返回的信息中直接获取真实的 BVID
