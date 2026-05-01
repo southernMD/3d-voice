@@ -1,5 +1,7 @@
-# Vue 3 + TypeScript + Vite
+# Vercel 部署说明
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+本项目要直接使用只支持部署至 Vercel 平台，如果自行采用服务器部署请配置vite.config.ts内其他接口代理。不采用配置只能使用本地文件
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 环境变量
+需要配置B23_RESOLVE_API环境变量服务器地址链接，用于对网易云音乐链接和b站短链解析，不配置只支持本地文件和b站长链，不支持网易云长短链和b站短链
+[解析服务项目](https://github.com/southernMD/b23-bv)部署后填写环境编辑即可
