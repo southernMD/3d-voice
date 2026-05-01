@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue';
-import { gsap } from 'gsap';
+import { ref, nextTick, computed } from 'vue';
 import type { AudioSystem } from '@/utils/audioSystem';
+import Drawer from './common/Drawer.vue';
 
 const props = defineProps<{
   audio: AudioSystem;
@@ -11,9 +11,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void;
 }>();
-
-const panel = ref<HTMLElement | null>(null);
-const mask = ref<HTMLElement | null>(null);
 
 // 搜索逻辑
 const searchQuery = ref('');
@@ -49,57 +46,32 @@ const saveRename = async () => {
 const cancelRename = () => {
   editingId.value = null;
 };
-
-// 监听可见性变化，执行动画
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    nextTick(() => {
-      if (panel.value) {
-        gsap.fromTo(panel.value, 
-          { x: 400, opacity: 0 },
-          { x: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }
-        );
-      }
-      if (mask.value) {
-        gsap.fromTo(mask.value,
-          { opacity: 0 },
-          { opacity: 1, duration: 0.5 }
-        );
-      }
-    });
-  }
-});
-
-const close = () => {
-  const tl = gsap.timeline({
-    onComplete: () => emit('close')
-  });
-  if (panel.value) {
-    tl.to(panel.value, { x: 400, opacity: 0, duration: 0.4, ease: 'power3.in' }, 0);
-  }
-  if (mask.value) {
-    tl.to(mask.value, { opacity: 0, duration: 0.4 }, 0);
-  }
-  if (!panel.value && !mask.value) emit('close');
-};
 </script>
 
 <template>
-  <div v-if="visible" class="playlist-wrapper">
-    <div ref="mask" class="playlist-mask" @click="close"></div>
-
-    <div ref="panel" class="playlist-panel">
-      <div class="panel-header">
-        <div class="header-top">
-          <h2>播放列表</h2>
-          <div class="header-btns">
-            <button v-if="audio.playlist.value.length > 0" class="clear-btn" @click="audio.clearAll()">清空列表</button>
-            <button class="close-btn" @click="close">
-              <i class="iconfont icon-guanbi_o"></i>
-            </button>
-          </div>
+  <Drawer 
+    :visible="visible" 
+    title="播放列表" 
+    direction="right" 
+    width="380px"
+    @close="emit('close')"
+  >
+    <!-- 自定义头部右侧按钮 -->
+    <template #header>
+      <div class="panel-header-content">
+        <h2>播放列表</h2>
+        <div class="header-actions">
+          <button v-if="audio.playlist.value.length > 0" class="clear-btn" @click="audio.clearAll()">清空</button>
+          <button class="close-icon" @click="emit('close')">
+            <i class="iconfont icon-guanbi_o"></i>
+          </button>
         </div>
-        <!-- 搜索栏 -->
+      </div>
+    </template>
+
+    <div class="playlist-inner">
+      <!-- 搜索栏 -->
+      <div class="search-container">
         <div class="search-bar">
           <input 
             v-model="searchQuery" 
@@ -143,11 +115,9 @@ const close = () => {
               <div class="bar"></div>
               <div class="bar"></div>
             </div>
-            <!-- 重命名按钮 -->
             <button class="action-btn" @click.stop="startRename(track.id, track.name)" title="重命名">
               <i class="iconfont icon-bianji"></i>
             </button>
-            <!-- 删除按钮 -->
             <button class="action-btn remove" @click.stop="audio.removeTrack(audio.playlist.value.findIndex(t => t.id === track.id))" title="移除">
               <i class="iconfont icon-lajixiang"></i>
             </button>
@@ -159,65 +129,66 @@ const close = () => {
         </div>
       </div>
     </div>
-  </div>
+  </Drawer>
 </template>
 
 <style scoped>
-.playlist-wrapper {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 1000;
-  pointer-events: none;
-}
-
-.playlist-mask {
-  position: absolute;
-  top: 0;
-  left: 0;
+.panel-header-content {
   width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.2);
-  pointer-events: auto;
-}
-
-.playlist-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 350px;
-  height: 100%;
-  background: rgba(10, 10, 10, 0.8);
-  backdrop-filter: blur(40px);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
-  pointer-events: auto;
-}
-
-.panel-header {
-  padding: 1rem 1.2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.header-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.panel-header h2 {
+.panel-header-content h2 {
   margin: 0;
   font-weight: 200;
   font-size: 1.2rem;
   letter-spacing: 0.2rem;
   color: rgba(255, 255, 255, 0.9);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.clear-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.clear-btn:hover {
+  background: rgba(255, 85, 85, 0.1);
+  color: #ff5555;
+  border-color: #ff5555;
+}
+
+.close-icon {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.playlist-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.search-container {
+  padding: 0 1.2rem 1rem 1.2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .search-bar {
@@ -230,11 +201,11 @@ const close = () => {
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 0.5rem 0.8rem;
-  padding-right: 2rem;
-  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  padding-right: 2.5rem;
+  border-radius: 8px;
   color: white;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   outline: none;
   transition: all 0.3s;
 }
@@ -246,53 +217,17 @@ const close = () => {
 
 .search-clear {
   position: absolute;
-  right: 0.6rem;
+  right: 0.8rem;
   top: 50%;
   transform: translateY(-50%);
   color: rgba(255, 255, 255, 0.3);
   cursor: pointer;
-  font-size: 1.1rem;
-}
-
-.header-btns {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-}
-
-.clear-btn {
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 1.5rem;
-  cursor: pointer;
-  line-height: 1;
-  opacity: 0.5;
 }
 
 .track-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0.4rem 0;
-}
-
-.track-list::-webkit-scrollbar {
-  width: 4px;
-}
-.track-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  padding: 0.5rem 0;
 }
 
 .track-item {
@@ -318,7 +253,7 @@ const close = () => {
   font-family: 'JetBrains Mono', monospace;
   opacity: 0.3;
   font-size: 0.75rem;
-  width: 18px;
+  width: 20px;
   flex-shrink: 0;
 }
 
@@ -351,7 +286,7 @@ const close = () => {
 .track-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
@@ -408,3 +343,4 @@ const close = () => {
   line-height: 1.6;
 }
 </style>
+ bitumen

@@ -2,7 +2,9 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
+import { TunnelPreset, SymmetricTunnelPreset } from '@/utils/visualizer/presets';
 import { useViewport } from '@/utils/viewport';
+import Drawer from './common/Drawer.vue';
 import ControlRow from './ControlRow.vue';
 import PlaylistPanel from './PlaylistPanel.vue';
 import DragUpload from './DragUpload.vue';
@@ -10,6 +12,20 @@ import DragUpload from './DragUpload.vue';
 // 引用与状态
 const container = ref<HTMLElement | null>(null);
 const playlistVisible = ref(false);
+const showSettings = ref(false);
+const currentPresetName = ref('赛博环绕');
+
+// 可用预设列表
+const presets = [
+  new TunnelPreset(),
+  new SymmetricTunnelPreset(),
+];
+
+const changePreset = (preset: any) => {
+  view.setPreset(preset);
+  currentPresetName.value = preset.name;
+  showSettings.value = false;
+};
 
 // 初始化系统 (单例)
 const audio = new AudioSystem();
@@ -182,6 +198,27 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- 左侧视觉设置抽屉 -->
+    <Drawer 
+      :visible="showSettings" 
+      title="视觉设置" 
+      direction="left" 
+      width="320px"
+      @close="showSettings = false"
+    >
+      <div class="preset-list-drawer">
+        <button 
+          v-for="p in presets" 
+          :key="p.name"
+          :class="['preset-item-drawer', { active: currentPresetName === p.name }]"
+          @click="changePreset(p)"
+        >
+          <span>{{ p.name }}</span>
+          <i class="iconfont icon-check" v-if="currentPresetName === p.name"></i>
+        </button>
+      </div>
+    </Drawer>
+
     <div class="bottom-controls">
       <!-- 进度条 -->
       <div class="progress-container">
@@ -208,7 +245,11 @@ onMounted(() => {
         </button>
         <button class="btn glass" @click="handleFileUpload">
           <i class="iconfont icon-tianjiawenjian" style="margin-right: 5px;"></i>
-          本地文件
+          本地
+        </button>
+        <button class="btn glass" @click="showSettings = true">
+          <i class="iconfont icon-chakan" style="margin-right: 5px;"></i>
+          视觉
         </button>
         <button class="btn glass playlist-btn" @click="playlistVisible = true">
           <i class="iconfont icon-24gf-playlist" style="margin-right: 5px;"></i>
@@ -240,7 +281,7 @@ onMounted(() => {
   top: 0;
   left: 0;
   width: 100%;
-  height: 2px;
+  height: 4px;
   z-index: 9999;
   background: rgba(0, 0, 0, 0.1);
   pointer-events: none;
@@ -309,7 +350,7 @@ onMounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.fullscreen-btn {
+.fullscreen-btn, .settings-btn {
   width: 44px;
   height: 44px;
   display: flex;
@@ -318,11 +359,47 @@ onMounted(() => {
   border-radius: 50%;
   padding: 0;
   transition: all 0.3s ease;
+  pointer-events: auto;
 }
 
-.fullscreen-btn:hover {
+.fullscreen-btn:hover, .settings-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   transform: scale(1.1);
+}
+
+/* 抽屉内预设列表样式 */
+.preset-list-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0 1.5rem;
+}
+
+.preset-item-drawer {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  padding: 1.2rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.preset-item-drawer:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.preset-item-drawer.active {
+  background: rgba(0, 255, 255, 0.1);
+  border-color: #00ffff;
+  color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
 }
 
 .track-name {
