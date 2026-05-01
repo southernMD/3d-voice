@@ -151,6 +151,14 @@ onMounted(() => {
 
 <template>
   <div class="visualizer-container">
+    <!-- 全局下载进度条 -->
+    <div class="global-download-progress" v-show="audio.downloadProgress.value > 0">
+      <div class="progress-inner" :style="{ width: audio.downloadProgress.value + '%' }"></div>
+      <div class="download-info" v-if="audio.downloadingName.value">
+        正在下载: {{ audio.downloadingName.value }} ({{ audio.downloadProgress.value.toFixed(0) }}%)
+      </div>
+    </div>
+
     <DragUpload @dropped="handleDroppedFiles" />
 
     <div ref="container" class="three-container"></div>
@@ -225,6 +233,37 @@ onMounted(() => {
   background: #050505;
   overflow: hidden;
   color: white;
+}
+
+.global-download-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+}
+
+.progress-inner {
+  height: 100%;
+  background: linear-gradient(90deg, #00ffff, #ff00ff);
+  transition: width 0.1s ease-out;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.8);
+}
+
+.download-info {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Inter', sans-serif;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
 }
 
 .three-container {

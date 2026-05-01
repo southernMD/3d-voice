@@ -9,7 +9,7 @@ import { getNeteaseMusicMsg } from './netease';
 export interface Track {
   id: string;
   name: string;
-  blob: Blob; // 改为存储 Blob
+  blob: Blob;
   url: string;
 }
 
@@ -36,6 +36,13 @@ export class AudioSystem {
   public currentIndex = ref(-1);
   public playMode = ref<PlayMode>(PlayMode.ListLoop);
 
+  // 下载状态监控
+  public downloadProgress = ref(0);
+  public downloadingName = ref('');
+
+  // 下载队列锁（确保并发任务排队执行）
+  private downloadQueue = Promise.resolve();
+
   // 进度与音量相关
   public currentTime = ref(0);
   public duration = ref(0);
@@ -59,6 +66,66 @@ export class AudioSystem {
     } catch (err) {
       console.error('加载缓存音乐失败:', err);
     }
+  }
+
+  /**
+   * 带进度的下载方法（内部实现）
+   */
+  private async _doFetchWithProgress(url: string, name: string, options: RequestInit = {}) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const contentLength = response.headers.get('content-length');
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+      if (!response.body) throw new Error('ReadableStream not supported');
+
+      const reader = response.body.getReader();
+      let loaded = 0;
+      const chunks: BlobPart[] = [];
+
+      console.log(`[Download] 开始下载: ${name}`);
+      this.downloadingName.value = name;
+      this.downloadProgress.value = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        chunks.push(value);
+        loaded += value.length;
+
+        if (total > 0) {
+          const progress = (loaded / total) * 100;
+          this.downloadProgress.value = progress;
+        }
+      }
+
+      console.log(`[Download] 下载完成: ${name}`);
+      this.downloadProgress.value = 100;
+
+      // 下载完成后短暂延迟重置，给用户一点感官反馈
+      await new Promise(r => setTimeout(r, 600));
+      return new Blob(chunks);
+    } finally {
+      // 无论成功还是失败，都要清理状态，防止 UI 卡死
+      this.downloadProgress.value = 0;
+      this.downloadingName.value = '';
+    }
+  }
+
+  /**
+   * 排队执行的下载方法（外部调用）
+   */
+  private async fetchWithProgress(url: string, name: string, options: RequestInit = {}): Promise<Blob> {
+    // 将任务链式挂载到 Promise 队列上
+    const task = this.downloadQueue.then(() => this._doFetchWithProgress(url, name, options));
+
+    // 更新队列锁，确保即便任务失败，队列也能继续走下一个
+    this.downloadQueue = task.then(() => { }).catch(() => { });
+
+    return task;
   }
 
   /**
@@ -154,12 +221,9 @@ export class AudioSystem {
       ? `/api/download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`
       : `/bili-download?url=${encodeURIComponent(audioUrl)}&referer=${encodeURIComponent(referer)}`;
 
-    const response = await fetch(fetchUrl, {
+    const blob = await this.fetchWithProgress(fetchUrl, title, {
       headers: sessData ? { 'X-Bili-Sessdata': sessData } : {}
     });
-
-    if (!response.ok) throw new Error('下载音频流失败，Referer 校验未通过');
-    const blob = await response.blob();
 
     const id = `bili-${Date.now()}`;
     await db.music.add({
@@ -186,16 +250,11 @@ export class AudioSystem {
    * 通过网易云音乐链接添加歌曲
    */
   public async addNeteaseTrack(url: string) {
-    // 1. 获取网易云音乐详情 (现在内部处理 URL 解析)
     const info = await getNeteaseMusicMsg(url);
     if (!info) throw new Error('无法获取歌曲信息');
 
-    // 2. 下载音频 Blob
-    const response = await fetch(info.url);
-    if (!response.ok) throw new Error('下载音频失败，该歌曲可能受版权保护或为 VIP 歌曲');
-    const blob = await response.blob();
+    const blob = await this.fetchWithProgress(info.url, info.name);
 
-    // 3. 存入数据库和列表
     const uid = `netease-${Date.now()}`;
     await db.music.add({
       uid,
@@ -226,7 +285,7 @@ export class AudioSystem {
     this.ensureContext();
     this.stopCurrent();
 
-    const track = this.playlist.value[index];
+    const track = this.playlist.value[index]!;
     this.currentIndex.value = index;
     this.fileName.value = track.name;
 
@@ -294,7 +353,7 @@ export class AudioSystem {
     if (!track) return;
 
     track.name = newName;
-    if (this.currentIndex.value !== -1 && this.playlist.value[this.currentIndex.value].id === id) {
+    if (this.currentIndex.value !== -1 && this.playlist.value[this.currentIndex.value]!.id === id) {
       this.fileName.value = newName;
     }
 
