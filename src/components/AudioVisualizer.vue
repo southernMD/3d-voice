@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
-import { TunnelPreset, SymmetricTunnelPreset } from '@/utils/visualizer/presets';
+import { TunnelPreset, SymmetricTunnelPreset, SpherePreset } from '@/utils/visualizer/presets';
 import { useViewport } from '@/utils/viewport';
 import Drawer from './common/Drawer.vue';
 import ControlRow from './ControlRow.vue';
@@ -19,12 +19,15 @@ const currentPresetName = ref('赛博环绕');
 const presets = [
   new TunnelPreset(),
   new SymmetricTunnelPreset(),
+  new SpherePreset(),
 ];
 
 const changePreset = (preset: any) => {
   view.setPreset(preset);
   currentPresetName.value = preset.name;
   showSettings.value = false;
+  // 缓存当前预设名称
+  localStorage.setItem('active_visualizer_preset', preset.name);
 };
 
 // 初始化系统 (单例)
@@ -42,6 +45,16 @@ onMounted(async () => {
   
   if (container.value) {
     view.init(container.value);
+    
+    // 恢复缓存的预设
+    const savedPresetName = localStorage.getItem('active_visualizer_preset');
+    if (savedPresetName) {
+      const savedPreset = presets.find(p => p.name === savedPresetName);
+      if (savedPreset) {
+        changePreset(savedPreset);
+      }
+    }
+
     animate();
   }
   window.addEventListener('resize', handleResize);

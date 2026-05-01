@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 import { type VisualizerPreset, TunnelPreset } from './visualizer/presets';
 
 /**
@@ -9,7 +10,10 @@ export class Visualizer {
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
   private renderer!: THREE.WebGLRenderer;
-  private controls!: OrbitControls;
+  
+  // 双控制器系统
+  private orbitControls!: OrbitControls;
+  private trackballControls!: TrackballControls;
 
   // 环境组件
   private particles!: THREE.Points;
@@ -42,11 +46,19 @@ export class Visualizer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.autoRotate = true;
-    this.controls.autoRotateSpeed = 0.3;
-    this.controls.maxPolarAngle = Math.PI * 0.7;
+    // 1. 初始化 OrbitControls (用于隧道等带地平线的场景)
+    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.orbitControls.enableDamping = true;
+    this.orbitControls.enablePan = false;
+    this.orbitControls.maxPolarAngle = Math.PI * 0.7;
+
+    // 2. 初始化 TrackballControls (用于星际原核全向翻滚)
+    this.trackballControls = new TrackballControls(this.camera, this.renderer.domElement);
+    this.trackballControls.noPan = true;
+    this.trackballControls.rotateSpeed = 2.5;
+    this.trackballControls.staticMoving = false;
+    this.trackballControls.dynamicDampingFactor = 0.1;
+    this.trackballControls.enabled = false; // 默认禁用
 
     // 初始化公共环境
     this.initParticles();
@@ -65,6 +77,25 @@ export class Visualizer {
     }
     this.currentPreset = preset;
     this.currentPreset.init(this.scene, this.BAR_COUNT, this.RADIUS);
+
+    // 统一使用 OrbitControls，保证所有场景都有自动旋转的“电影感”
+    this.orbitControls.enabled = true;
+    this.orbitControls.autoRotate = true;
+    this.orbitControls.autoRotateSpeed = 1.0;
+    this.trackballControls.enabled = false;
+
+    if (preset.name === '星际原核') {
+      // 核心场景：允许全方位自由观察，不限制俯仰角
+      this.orbitControls.maxPolarAngle = Math.PI;
+      this.orbitControls.minPolarAngle = 0;
+      this.camera.position.set(0, 5, 30);
+    } else {
+      // 隧道场景：限制地平线，防止翻转
+      this.orbitControls.maxPolarAngle = Math.PI * 0.7;
+      this.orbitControls.minPolarAngle = 0;
+      this.camera.position.set(0, 15, 25);
+    }
+    this.orbitControls.update();
   }
 
   private initParticles() {
@@ -135,23 +166,27 @@ export class Visualizer {
   }
 
   public update(dataArray: Uint8Array | null) {
+    // 即使没有音频数据，也要保证预设的 update 被调用，以维持旋转等动画
+    const fftSize = dataArray ? dataArray.length : 512;
+    const effectiveData = dataArray || new Uint8Array(fftSize);
+
+    if (this.currentPreset) {
+      this.currentPreset.update(effectiveData, fftSize);
+    }
+
+    // 即使没有音频数据，也要更新环境光和背景粒子旋转
+    const maxVal = dataArray ? Math.max(...Array.from(dataArray)) : 0;
+    const pulse = maxVal / 255;
+
+    this.centerLight.intensity = pulse * 120;
+    this.centerLight.color.setHSL(0.5 + pulse * 0.2, 1, 0.5);
+
+    // 基础旋转速度 + 随节奏加快的速度
+    this.particles.rotation.y += 0.0005 + pulse * 0.003;
+    this.particles.position.y = Math.sin(Date.now() * 0.001) * 1;
+
+    // 只有当存在真实音频数据时，才触发流星系统
     if (dataArray) {
-      const fftSize = dataArray.length;
-
-      // 更新当前预设
-      if (this.currentPreset) {
-        this.currentPreset.update(dataArray, fftSize);
-      }
-
-      const maxVal = Math.max(...Array.from(dataArray));
-      const pulse = maxVal / 255;
-
-      this.centerLight.intensity = pulse * 120;
-      this.centerLight.color.setHSL(0.5 + pulse * 0.2, 1, 0.5);
-
-      this.particles.rotation.y += 0.0005 + pulse * 0.003;
-      this.particles.position.y = Math.sin(Date.now() * 0.001) * 1;
-
       const isBeat = pulse > 0.35 && (pulse - this.lastPulse) > 0.08;
       this.lastPulse = pulse;
       if (isBeat) {
@@ -161,7 +196,12 @@ export class Visualizer {
     }
 
     this.updateMeteors();
-    if (this.controls) this.controls.update();
+    
+    // 更新活跃的控制器
+    if (this.orbitControls.enabled) this.orbitControls.update();
+    if (this.trackballControls.enabled) this.trackballControls.handleResize(); // 轨迹球需要特殊处理
+    if (this.trackballControls.enabled) this.trackballControls.update();
+    
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -169,10 +209,12 @@ export class Visualizer {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
+    if (this.trackballControls) this.trackballControls.handleResize();
   }
 
   public dispose() {
-    if (this.controls) this.controls.dispose();
+    this.orbitControls.dispose();
+    this.trackballControls.dispose();
     this.renderer.dispose();
     if (this.currentPreset) this.currentPreset.dispose(this.scene);
     this.scene.clear();
