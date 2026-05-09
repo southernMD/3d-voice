@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { db } from '@/utils/db';
 import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
 import { TunnelPreset, SymmetricTunnelPreset, SpherePreset } from '@/utils/visualizer/presets';
@@ -40,6 +41,34 @@ const view = new Visualizer();
 const viewport = useViewport();
 let animationId: number;
 
+// 逐字打印队列逻辑
+let wordQueue: any[] = [];
+let lastTimeMs = 0;
+
+// 扁平化歌词并初始化队列
+const resetWordQueue = (startTimeMs = 0) => {
+  if (!audio.currentLyrics.value) {
+    wordQueue = [];
+    return;
+  }
+  const flat: any[] = [];
+  for (const s of audio.currentLyrics.value) {
+    if (s.words) {
+      for (const w of s.words) {
+        flat.push(w);
+      }
+    }
+  }
+  flat.sort((a, b) => a.start_time - b.start_time);
+  // 过滤掉已经完全过去的字
+  wordQueue = flat.filter(w => w.start_time >= startTimeMs);
+};
+
+// 监听歌词载入或切换歌曲
+watch(() => audio.currentLyrics.value, () => {
+  resetWordQueue(audio.currentTime.value * 1000);
+});
+
 onMounted(async () => {
   // 初始化视口监控
   viewport.init();
@@ -67,10 +96,18 @@ onMounted(async () => {
   worker = new AsrWorker();
   worker.postMessage('START');
   
-  worker.onmessage = (e) => {
+  worker.onmessage = async (e) => {
     if (e.data?.type === 'UPDATE_SUCCESS') {
-      // 如果当前播放的歌曲恰好被识别完，可以通知系统重载歌词 (留作可选扩展)
       console.log(`[Main] 收到 Worker 识别成功通知, ID: ${e.data.id}`);
+      // 检查更新的歌词是否属于正在播放的歌曲
+      const currentTrack = audio.playlist.value[audio.currentIndex.value];
+      if (currentTrack) {
+        const dbRecord = await db.music.get(e.data.id);
+        if (dbRecord && dbRecord.uid === currentTrack.id) {
+          audio.currentLyrics.value = dbRecord.lrcJson || null;
+          console.log('[Main] 当前播放的歌曲歌词已在后台加载完毕并应用！');
+        }
+      }
     }
   };
 });
@@ -87,6 +124,24 @@ const animate = () => {
   animationId = requestAnimationFrame(animate);
   const data = audio.getFrequencyData();
   view.update(data);
+
+  // 逐字歌词队列出队打印
+  if (audio.isPlaying.value && audio.currentLyrics.value) {
+    const timeMs = audio.currentTime.value * 1000;
+
+    // 检测用户跳转进度 (Seek)
+    if (Math.abs(timeMs - lastTimeMs) > 1000) {
+      resetWordQueue(timeMs);
+    }
+
+    // 核心逻辑：如果当前时间超过了队首字的开始时间，该字及之前的所有字出队并打印
+    while (wordQueue.length > 0 && timeMs >= wordQueue[0].start_time) {
+      const w = wordQueue.shift();
+      console.log(`[逐字歌词] ${w.label}`);
+    }
+
+    lastTimeMs = timeMs;
+  }
 };
 
 const handleFileUpload = async () => {

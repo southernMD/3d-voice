@@ -128,6 +128,8 @@ export class AudioSystem {
     return task;
   }
 
+  public currentLyrics = ref<any[] | null>(null);
+
   /**
    * 初始化音频上下文
    */
@@ -225,7 +227,7 @@ export class AudioSystem {
       headers: sessData ? { 'X-Bili-Sessdata': sessData } : {}
     });
 
-    const id = `bili-${Date.now()}`;
+    const id = `bili-${bvid}`;
     await db.music.add({
       uid: id,
       name: title,
@@ -255,7 +257,7 @@ export class AudioSystem {
 
     const blob = await this.fetchWithProgress(info.url, info.name);
 
-    const uid = `netease-${Date.now()}`;
+    const uid = `netease-${info.id}`;
     await db.music.add({
       uid,
       name: `${info.name} - ${info.artist}`,
@@ -279,7 +281,7 @@ export class AudioSystem {
   /**
    * 播放指定索引的歌曲
    */
-  public playTrack(index: number) {
+  public async playTrack(index: number) {
     if (index < 0 || index >= this.playlist.value.length) return;
 
     this.ensureContext();
@@ -288,6 +290,14 @@ export class AudioSystem {
     const track = this.playlist.value[index]!;
     this.currentIndex.value = index;
     this.fileName.value = track.name;
+
+    // 从数据库加载该歌曲的歌词
+    try {
+      const dbRecord = await db.music.where('uid').equals(track.id).first();
+      this.currentLyrics.value = dbRecord?.lrcJson || null;
+    } catch (err) {
+      console.error('加载歌词失败:', err);
+    }
 
     this.audioTag = new Audio();
     this.audioTag.src = track.url;
