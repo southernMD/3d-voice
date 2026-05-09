@@ -4,6 +4,7 @@ import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
 import { TunnelPreset, SymmetricTunnelPreset, SpherePreset } from '@/utils/visualizer/presets';
 import { useViewport } from '@/utils/viewport';
+import { asrService } from '@/utils/asr';
 import Drawer from './common/Drawer.vue';
 import ControlRow from './ControlRow.vue';
 import PlaylistPanel from './PlaylistPanel.vue';
@@ -14,6 +15,8 @@ const container = ref<HTMLElement | null>(null);
 const playlistVisible = ref(false);
 const showSettings = ref(false);
 const currentPresetName = ref('赛博环绕');
+const isTranscribing = ref(false);
+const lyrics = ref<any[]>([]);
 
 // 可用预设列表
 const presets = [
@@ -157,6 +160,27 @@ const handleNeteaseImport = async () => {
   }
 };
 
+const handleTranscribe = async () => {
+  const blob = audio.getCurrentTrackBlob();
+  if (!blob) {
+    alert('当前没有播放任何音乐');
+    return;
+  }
+
+  isTranscribing.value = true;
+  try {
+    const result = await asrService.transcribe(blob);
+    // 必剪返回的结果中 utterances 包含分句和逐字时间戳
+    lyrics.value = result.utterances || [];
+    alert('识别成功！已获取分词字幕。');
+  } catch (err) {
+    console.error('ASR Error:', err);
+    alert('识别失败，请检查控制台及 Vite 代理配置。');
+  } finally {
+    isTranscribing.value = false;
+  }
+};
+
 const isFullscreen = ref(false);
 const toggleFullscreen = () => {
   if (!document.fullscreenElement) {
@@ -251,6 +275,10 @@ onMounted(() => {
         <button class="btn glass" @click="handleBilibiliImport">
           <i class="iconfont icon-yinle" style="margin-right: 5px;"></i>
           B站链接
+        </button>
+        <button class="btn glass" @click="handleTranscribe" :disabled="isTranscribing">
+          <i class="iconfont icon-record" style="margin-right: 5px;"></i>
+          {{ isTranscribing ? '识别中...' : '字幕' }}
         </button>
         <button class="btn glass" @click="handleNeteaseImport">
           <i class="iconfont icon-yinle" style="margin-right: 5px;"></i>

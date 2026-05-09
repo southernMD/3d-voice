@@ -13,6 +13,14 @@
       "destination": "/api/bili?path=$1"
     },
     {
+      "source": "/bcut-api/(.*)",
+      "destination": "/api/bcut-api?path=$1"
+    },
+    {
+      "source": "/bcut-upload/(.*)",
+      "destination": "/api/bcut-upload?path=$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }

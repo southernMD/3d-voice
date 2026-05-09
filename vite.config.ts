@@ -76,6 +76,7 @@ export default defineConfig(({ mode }) => {
             'Origin': 'https://music-api.gdstudio.xyz'
           }
         },
+        // 代理 Bilibili API
         '/bili-api': {
           target: 'https://api.bilibili.com',
           changeOrigin: true,
@@ -83,6 +84,26 @@ export default defineConfig(({ mode }) => {
           headers: {
             'Referer': 'https://www.bilibili.com',
             'Origin': 'https://www.bilibili.com'
+          }
+        },
+        // 代理必剪 ASR 接口
+        '/bcut-api': {
+          target: 'https://member.bilibili.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/bcut-api/, ''),
+          headers: {
+            'Referer': 'https://member.bilibili.com/x/bcut/asr',
+            'Origin': 'https://member.bilibili.com'
+          }
+        },
+        // 代理必剪上传接口 (BOS 存储)
+        '/bcut-upload': {
+          target: 'https://boss.bilibili.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/bcut-upload/, ''),
+          headers: {
+            'Referer': 'https://member.bilibili.com/',
+            'Origin': 'https://member.bilibili.com'
           }
         }
       }

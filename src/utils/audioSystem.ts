@@ -445,6 +445,14 @@ export class AudioSystem {
     return null;
   }
 
+  /**
+   * 获取当前播放音轨的原始数据 Blob
+   */
+  public getCurrentTrackBlob(): Blob | null {
+    if (this.currentIndex.value === -1) return null;
+    return this.playlist.value[this.currentIndex.value]?.blob || null;
+  }
+
   public dispose() {
     this.stopCurrent();
     if (this.audioContext) {
