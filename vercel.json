@@ -17,8 +17,12 @@
       "destination": "/api/bcut-api?path=$1"
     },
     {
-      "source": "/bcut-upload/(.*)",
-      "destination": "/api/bcut-upload?path=$1"
+      "source": "/bcut-upload",
+      "destination": "/api/bcut-upload"
+    },
+    {
+      "source": "/bcut-upload-proxy",
+      "destination": "/api/bcut-upload-proxy"
     },
     {
       "source": "/(.*)",

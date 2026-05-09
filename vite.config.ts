@@ -45,6 +45,66 @@ const biliProxyPlugin = () => ({
   }
 });
 
+// 自定义插件：用于开发环境代理必剪的动态 BOS 节点上传 (PUT请求)
+const bcutUploadProxyPlugin = () => ({
+  name: 'bcut-upload-proxy',
+  configureServer(server: any) {
+    server.middlewares.use(async (req: IncomingMessage, res: any, next: any) => {
+      if (req.url?.startsWith('/bcut-upload-proxy') && req.method === 'PUT') {
+        const urlObj = new URL(req.url, `http://${req.headers.host}`);
+        const targetUrl = urlObj.searchParams.get('url');
+
+        if (!targetUrl) {
+          res.statusCode = 400;
+          res.end('Missing target url');
+          return;
+        }
+
+        try {
+          const chunks: any[] = [];
+          for await (const chunk of req) {
+            chunks.push(chunk);
+          }
+          const body = Buffer.concat(chunks);
+
+          const fetchRes = await fetch(targetUrl, {
+            method: 'PUT',
+            headers: {
+              'Referer': 'https://member.bilibili.com/',
+              'Origin': 'https://member.bilibili.com',
+              'User-Agent': req.headers['user-agent'] || '',
+            },
+            body
+          });
+
+          const etag = fetchRes.headers.get('etag') || fetchRes.headers.get('Etag');
+          if (etag) {
+            res.setHeader('Etag', etag);
+            // 这里兼容大小写，浏览器才能取到
+            res.setHeader('Access-Control-Expose-Headers', 'Etag, etag');
+          }
+          
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'PUT, OPTIONS');
+          res.statusCode = fetchRes.status;
+          res.end(await fetchRes.text());
+        } catch (err) {
+          res.statusCode = 500;
+          res.end(String(err));
+        }
+      } else if (req.url?.startsWith('/bcut-upload-proxy') && req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'PUT, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.statusCode = 200;
+        res.end();
+      } else {
+        next();
+      }
+    });
+  }
+});
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 加载环境变量
@@ -52,7 +112,7 @@ export default defineConfig(({ mode }) => {
   const musicResolveTarget = env.B23_RESOLVE_API || 'http://localhost:3000';
 
   return {
-    plugins: [vue(), biliProxyPlugin()],
+    plugins: [vue(), biliProxyPlugin(), bcutUploadProxyPlugin()],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
