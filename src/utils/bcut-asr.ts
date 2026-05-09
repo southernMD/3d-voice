@@ -91,8 +91,11 @@ export class BcutASR {
       const end = (i + 1) * this.perSize;
       const chunk = this.soundBin.slice(start, end);
 
-      // 使用动态代理来支持不同的 CDN 和签名
-      const uploadUrl = `/bcut-upload-proxy?url=${encodeURIComponent(this.uploadUrls[i])}`;
+      // 使用路径格式重写来绕过 Vercel Edge 4.5MB 限制
+      // 格式: /bcut-upload-proxy/http/domain.com/path?query
+      const originalUrl = new URL(this.uploadUrls[i]);
+      const protocol = originalUrl.protocol.replace(':', '');
+      const uploadUrl = `/bcut-upload-proxy/${protocol}/${originalUrl.hostname}${originalUrl.pathname}${originalUrl.search}`;
 
       const resp = await fetch(uploadUrl, {
         method: 'PUT',

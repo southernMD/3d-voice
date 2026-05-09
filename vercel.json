@@ -1,4 +1,15 @@
 {
+  "headers": [
+    {
+      "source": "/bcut-upload-proxy/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "PUT, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "*" },
+        { "key": "Access-Control-Expose-Headers", "value": "ETag, etag" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/music-api/(.*)",
@@ -17,12 +28,16 @@
       "destination": "/api/bcut-api?path=$1"
     },
     {
-      "source": "/bcut-upload",
-      "destination": "/api/bcut-upload"
+      "source": "/bcut-upload/(.*)",
+      "destination": "/api/bcut-upload?path=$1"
     },
     {
-      "source": "/bcut-upload-proxy",
-      "destination": "/api/bcut-upload-proxy"
+      "source": "/bcut-upload-proxy/http/:domain/:path*",
+      "destination": "http://:domain/:path*"
+    },
+    {
+      "source": "/bcut-upload-proxy/https/:domain/:path*",
+      "destination": "https://:domain/:path*"
     },
     {
       "source": "/(.*)",

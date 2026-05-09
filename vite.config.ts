@@ -50,54 +50,55 @@ const bcutUploadProxyPlugin = () => ({
   name: 'bcut-upload-proxy',
   configureServer(server: any) {
     server.middlewares.use(async (req: IncomingMessage, res: any, next: any) => {
-      if (req.url?.startsWith('/bcut-upload-proxy') && req.method === 'PUT') {
-        const urlObj = new URL(req.url, `http://${req.headers.host}`);
-        const targetUrl = urlObj.searchParams.get('url');
+      if (req.url?.startsWith('/bcut-upload-proxy/')) {
+        const match = req.url.match(/^\/bcut-upload-proxy\/(http|https)\/([^\/]+)(.*)$/);
+        if (!match) return next();
+        
+        const targetUrl = `${match[1]}://${match[2]}${match[3]}`;
 
-        if (!targetUrl) {
-          res.statusCode = 400;
-          res.end('Missing target url');
-          return;
-        }
-
-        try {
-          const chunks: any[] = [];
-          for await (const chunk of req) {
-            chunks.push(chunk);
-          }
-          const body = Buffer.concat(chunks);
-
-          const fetchRes = await fetch(targetUrl, {
-            method: 'PUT',
-            headers: {
-              'Referer': 'https://member.bilibili.com/',
-              'Origin': 'https://member.bilibili.com',
-              'User-Agent': req.headers['user-agent'] || '',
-            },
-            body
-          });
-
-          const etag = fetchRes.headers.get('etag') || fetchRes.headers.get('Etag');
-          if (etag) {
-            res.setHeader('Etag', etag);
-            // 这里兼容大小写，浏览器才能取到
-            res.setHeader('Access-Control-Expose-Headers', 'Etag, etag');
-          }
-          
+        if (req.method === 'OPTIONS') {
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('Access-Control-Allow-Methods', 'PUT, OPTIONS');
-          res.statusCode = fetchRes.status;
-          res.end(await fetchRes.text());
-        } catch (err) {
-          res.statusCode = 500;
-          res.end(String(err));
+          res.setHeader('Access-Control-Allow-Headers', '*');
+          res.statusCode = 200;
+          return res.end();
         }
-      } else if (req.url?.startsWith('/bcut-upload-proxy') && req.method === 'OPTIONS') {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'PUT, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', '*');
-        res.statusCode = 200;
-        res.end();
+
+        if (req.method === 'PUT') {
+          try {
+            const chunks: any[] = [];
+            for await (const chunk of req) {
+              chunks.push(chunk);
+            }
+            const body = Buffer.concat(chunks);
+
+            const fetchRes = await fetch(targetUrl, {
+              method: 'PUT',
+              headers: {
+                'Referer': 'https://member.bilibili.com/',
+                'Origin': 'https://member.bilibili.com',
+                'User-Agent': req.headers['user-agent'] || '',
+              },
+              body
+            });
+
+            const etag = fetchRes.headers.get('etag') || fetchRes.headers.get('Etag');
+            if (etag) {
+              res.setHeader('Etag', etag);
+              res.setHeader('Access-Control-Expose-Headers', 'Etag, etag');
+            }
+            
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'PUT, OPTIONS');
+            res.statusCode = fetchRes.status;
+            res.end(await fetchRes.text());
+          } catch (err) {
+            res.statusCode = 500;
+            res.end(String(err));
+          }
+        } else {
+          next();
+        }
       } else {
         next();
       }
