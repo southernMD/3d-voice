@@ -4,19 +4,20 @@ import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
 import { TunnelPreset, SymmetricTunnelPreset, SpherePreset } from '@/utils/visualizer/presets';
 import { useViewport } from '@/utils/viewport';
-import { asrService } from '@/utils/asr';
 import Drawer from './common/Drawer.vue';
 import ControlRow from './ControlRow.vue';
 import PlaylistPanel from './PlaylistPanel.vue';
 import DragUpload from './DragUpload.vue';
+import AsrWorker from '@/workers/asrWorker?worker';
 
 // 引用与状态
 const container = ref<HTMLElement | null>(null);
 const playlistVisible = ref(false);
 const showSettings = ref(false);
 const currentPresetName = ref('赛博环绕');
-const isTranscribing = ref(false);
-const lyrics = ref<any[]>([]);
+
+// 独立 Worker 实例
+let worker: Worker;
 
 // 可用预设列表
 const presets = [
@@ -61,6 +62,17 @@ onMounted(async () => {
     animate();
   }
   window.addEventListener('resize', handleResize);
+
+  // 初始化并启动后台静默扫描的 Web Worker
+  worker = new AsrWorker();
+  worker.postMessage('START');
+  
+  worker.onmessage = (e) => {
+    if (e.data?.type === 'UPDATE_SUCCESS') {
+      // 如果当前播放的歌曲恰好被识别完，可以通知系统重载歌词 (留作可选扩展)
+      console.log(`[Main] 收到 Worker 识别成功通知, ID: ${e.data.id}`);
+    }
+  };
 });
 
 onUnmounted(() => {
@@ -93,6 +105,7 @@ const handleFileUpload = async () => {
     if (files.length > 0) {
       await audio.addTracksWithValidation(files);
       if (!playlistVisible.value) playlistVisible.value = true;
+      worker.postMessage('START');
     }
   } catch (err: any) {
     if (err.name !== 'AbortError') {
@@ -105,6 +118,7 @@ const handleDroppedFiles = async (files: File[]) => {
   if (files.length > 0) {
     await audio.addTracksWithValidation(files);
     if (!playlistVisible.value) playlistVisible.value = true;
+    worker.postMessage('START');
   }
 };
 
@@ -141,6 +155,7 @@ const handleBilibiliImport = async () => {
   try {
     const track = await audio.addBiliTrack(url);
     alert(`成功添加：${track.name}`);
+    worker.postMessage('START');
   } catch (err) {
     console.error('导入 B 站音频失败:', err);
     alert('导入失败，请检查链接有效性或 CORS 限制。');
@@ -154,32 +169,14 @@ const handleNeteaseImport = async () => {
   try {
     const track = await audio.addNeteaseTrack(url);
     alert(`成功添加：${track.name}`);
+    worker.postMessage('START');
   } catch (err) {
     console.error('导入网易云音乐失败:', err);
     alert('导入失败，该歌曲可能受版权保护或链接无效。');
   }
 };
 
-const handleTranscribe = async () => {
-  const blob = audio.getCurrentTrackBlob();
-  if (!blob) {
-    alert('当前没有播放任何音乐');
-    return;
-  }
 
-  isTranscribing.value = true;
-  try {
-    const result = await asrService.transcribe(blob);
-    // 必剪返回的结果中 utterances 包含分句和逐字时间戳
-    lyrics.value = result.utterances || [];
-    alert('识别成功！已获取分词字幕。');
-  } catch (err) {
-    console.error('ASR Error:', err);
-    alert('识别失败，请检查控制台及 Vite 代理配置。');
-  } finally {
-    isTranscribing.value = false;
-  }
-};
 
 const isFullscreen = ref(false);
 const toggleFullscreen = () => {
@@ -275,10 +272,6 @@ onMounted(() => {
         <button class="btn glass" @click="handleBilibiliImport">
           <i class="iconfont icon-yinle" style="margin-right: 5px;"></i>
           B站链接
-        </button>
-        <button class="btn glass" @click="handleTranscribe" :disabled="isTranscribing">
-          <i class="iconfont icon-record" style="margin-right: 5px;"></i>
-          {{ isTranscribing ? '识别中...' : '字幕' }}
         </button>
         <button class="btn glass" @click="handleNeteaseImport">
           <i class="iconfont icon-yinle" style="margin-right: 5px;"></i>

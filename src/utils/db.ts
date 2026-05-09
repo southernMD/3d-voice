@@ -8,6 +8,7 @@ export interface MusicRecord {
   uid: string; // 唯一标识符
   name: string;
   data: Blob;  // 存储 Blob 二进制数据
+  lrcJson?: any; // 存储解析后的歌词 JSON 数据
 }
 
 /**
@@ -18,8 +19,9 @@ const db = new Dexie('MusicDatabase') as Dexie & {
 };
 
 // 定义 Schema
-db.version(1).stores({
-  music: '++id, uid, name'
+// 如果只添加非索引字段 (lrcJson)，可以不升级 version
+db.version(2).stores({
+  music: '++id, uid, name, lrcJson'
 });
 
 export { db };
