@@ -7,10 +7,23 @@ export const config = {
  * 处理智谱 AI 的 API 调用并注入环境变量中的 API Key
  */
 export default async function handler(req: Request) {
+  // 1. 优先处理 OPTIONS 预检请求 (CORS)
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
+
   const apiKey = process.env.AI_API_KEY;
 
-  // 1. 校验环境变量是否存在
+  // 2. 校验环境变量是否存在
   if (!apiKey) {
+    console.error('[Vercel AI Proxy] Error: AI_API_KEY is not defined');
     return new Response(JSON.stringify({ error: 'Missing AI_API_KEY in Vercel environment variables' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
@@ -21,31 +34,30 @@ export default async function handler(req: Request) {
   const targetUrl = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 
   try {
-    // 2. 转发请求，注入鉴权头
+    // 3. 准备请求头，使用显式的 Headers 对象以确保稳定性
+    const requestHeaders = new Headers();
+    requestHeaders.set('Content-Type', 'application/json');
+    requestHeaders.set('Authorization', `Bearer ${apiKey}`);
+
+    // 获取原始请求体
+    const body = await req.text();
+
+    console.log(`[Vercel AI Proxy] Forwarding to BigModel. Key prefix: ${apiKey.slice(0, 6)}...`);
+
+    // 4. 转发请求
     const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      // 转发原始请求体
-      body: await req.blob(),
+      headers: requestHeaders,
+      body: body,
     });
 
-    // 3. 构造返回头，支持跨域
-    const newHeaders = new Headers(response.headers);
-    newHeaders.set('Access-Control-Allow-Origin', '*');
-    newHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    // 处理 OPTIONS 预检请求
-    if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: newHeaders });
-    }
-
+    // 5. 构造返回头
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.set('Access-Control-Allow-Origin', '*');
+    
     return new Response(response.body, {
       status: response.status,
-      headers: newHeaders,
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error('[Vercel AI Proxy Error]:', error);

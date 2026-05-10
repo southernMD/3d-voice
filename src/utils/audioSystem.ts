@@ -63,6 +63,22 @@ export class AudioSystem {
           url: URL.createObjectURL(r.data)
         }));
         this.playlist.value.push(...cachedTracks);
+
+        // 自动触发补全：针对存量的本地或 B 站歌曲进行 AI 解析
+        records.forEach(r => {
+          if (!r.uid.startsWith('netease') && !r.neteaseId && !r.lrcJson) {
+            extractMusicInfo(r.name).then(async (info) => {
+              if (info.name) {
+                console.log(`[AI 自动补全] ${r.name} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
+                const bestId = await searchAndGetBestMatchId(info.name, info.artist);
+                if (bestId) {
+                  await db.music.update(r.id!, { neteaseId: bestId });
+                  console.log(`[ID Sync] 成功补全网易云 ID: ${bestId} (${r.name})`);
+                }
+              }
+            }).catch(() => { });
+          }
+        });
       }
     } catch (err) {
       console.error('加载缓存音乐失败:', err);
