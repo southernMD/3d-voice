@@ -19,35 +19,34 @@ export default async function handler(req: Request) {
     });
   }
 
-  const apiKey = process.env.AI_API_KEY;
-
   // 2. 校验环境变量是否存在
-  if (!apiKey) {
+  const rawKey = process.env.AI_API_KEY;
+  if (!rawKey) {
     console.error('[Vercel AI Proxy] Error: AI_API_KEY is not defined');
-    return new Response(JSON.stringify({ error: 'Missing AI_API_KEY in Vercel environment variables' }), {
+    return new Response(JSON.stringify({ error: 'Missing AI_API_KEY' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
+  // 清洗 Key：去除首尾空格、去除可能的双引号/单引号
+  const apiKey = rawKey.trim().replace(/^["']|["']$/g, '');
+
   // 智谱 AI 官方接口地址
   const targetUrl = 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 
   try {
-    // 3. 准备请求头，使用显式的 Headers 对象以确保稳定性
-    const requestHeaders = new Headers();
-    requestHeaders.set('Content-Type', 'application/json');
-    requestHeaders.set('Authorization', `Bearer ${apiKey}`);
-
-    // 获取原始请求体
     const body = await req.text();
+    console.log(`[Vercel AI Proxy] Forwarding... KeyLength: ${apiKey.length}, Prefix: ${apiKey.slice(0, 4)}`);
 
-    console.log(`[Vercel AI Proxy] Forwarding to BigModel. Key prefix: ${apiKey.slice(0, 6)}...`);
-
-    // 4. 转发请求
+    // 3. 转发请求
     const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: requestHeaders,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Accept': 'application/json',
+      },
       body: body,
     });
 
