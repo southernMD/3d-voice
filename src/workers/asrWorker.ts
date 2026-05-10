@@ -20,6 +20,21 @@ interface NeteaseLrcLine {
   text: string;
 }
 
+interface EmotionScore {
+  valence: number;
+  arousal: number;
+  tag: string;
+}
+
+interface LyricEmotion {
+  global: EmotionScore;
+  segments: { start: number; end: number; emotion: EmotionScore }[];
+}
+
+interface ASRResult {
+  utterances: Utterance[];
+}
+
 // 解析网易云 LRC 歌词
 function parseNeteaseLrc(lrcStr: string): NeteaseLrcLine[] {
   const lines = lrcStr.split('\n');
@@ -155,6 +170,38 @@ function mergeLyrics(bLines: Utterance[], aLines: NeteaseLrcLine[]): Utterance[]
 
 
 
+const VALIDATE_ASR_PROMPT = `[Strict Rule] 你是一个极度严苛的歌词质量审计引擎。分析 ASR (语音转文字) 识别结果。你的任务是剔除由于噪音产生的乱码识别。
+判断不合理的标准：
+1. **语义破碎**：句子不通顺，单词无逻辑关联（如：“哈玛尼女人格律师”、“阿莫西西比”等）。
+2. **乱码倾向**：文本看起来像是随机汉字或幻听。
+判断合理的标准：
+1. 句子语义基本通顺，具有人类语言逻辑。
+2. 看起来像是真实歌词。
+只要识别结果中充斥着明显是识别噪音产生的音译乱码，必须返回 false。
+返回值：只返回 true 或 false，严禁解释。`;
+
+async function validateAsrLyrics(asrData: any): Promise<boolean> {
+  try {
+    const response = await fetch('/ai-api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: "glm-4-flash",
+        messages: [
+          { role: "system", content: VALIDATE_ASR_PROMPT },
+          { role: "user", content: JSON.stringify(asrData) }
+        ],
+        temperature: 0.1
+      })
+    });
+    const data = await response.json();
+    const content = data.choices[0].message.content.trim().toLowerCase();
+    return content.includes('true');
+  } catch (e) {
+    return true;
+  }
+}
+
 // 获取网易云歌词并支持重试
 async function fetchLrcWithRetry(id: string, retries = 3): Promise<string | null> {
   for (let i = 0; i < retries; i++) {
@@ -176,13 +223,69 @@ async function fetchLrcWithRetry(id: string, retries = 3): Promise<string | null
   return null;
 }
 
+const EMOTION_PROMPT = `[Strict Rule] 你是一个精简的情感分析引擎。分析歌词并按【情感区间】返回坐标。
+情感分类：Passionate (激情), Melancholy (失落), Calm (平静), Desperate (绝望)。
+输出格式 (JSON)：
+{
+  "global": {"valence": 0.2, "arousal": 0.5, "tag": "Calm"},
+  "segments": [
+    {"start": 0, "end": 8, "emotion": {"valence": 0.1, "arousal": 0.2, "tag": "Calm"}},
+    {"start": 9, "end": 20, "emotion": {"valence": -0.5, "arousal": 0.8, "tag": "Desperate"}}
+  ]
+}
+规则：
+1. 【核心目标】：根据歌词的语义（如主歌、副歌、高潮）划分区间。通常一首歌只需要 3-10 个区间。
+2. 【严格边界】：最后一个 segment 的 end 必须【严格等于】输入的总行数减 1。禁止生成超出实际行数的区间。
+3. 如果情感转折剧烈，即使只有一行也可以单独作为一个 segment。
+4. Valence (正负情感): -1到1，Arousal (激动程度): 0到1。
+5. 严禁解释，只返回 JSON。`;
+
+async function analyzeLyricEmotion(lyrics: string): Promise<LyricEmotion | null> {
+  try {
+    const lines = lyrics.split('\n');
+    const totalLines = lines.length;
+
+    const response = await fetch('/ai-api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: "glm-4-flash",
+        messages: [
+          { role: "system", content: EMOTION_PROMPT },
+          { role: "user", content: `歌词总行数: ${totalLines}\n歌词内容:\n${lyrics.slice(0, 3000)}` }
+        ],
+        temperature: 0.1
+      })
+    });
+
+    const data = await response.json();
+    if (data.choices && data.choices[0]) {
+      const aiResponse = data.choices[0].message.content.trim();
+      if (aiResponse.toLowerCase() === 'null') return null;
+
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]) as LyricEmotion;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.warn("[ASR Worker Emotion] 分析失败:", e);
+    const totalLines = lyrics.split('\n').length;
+    return {
+      global: { valence: 0, arousal: 0.2, tag: "Calm" },
+      segments: [{ start: 0, end: totalLines - 1, emotion: { valence: 0, arousal: 0.2, tag: "Calm" } }]
+    };
+  }
+}
+
 self.onmessage = async (e: MessageEvent) => {
   if (e.data === 'START') {
     try {
       const records = await db.music.toArray();
 
       for (const record of records) {
-        if (!record.lrcJson) {
+        if (!record.lrcJson && !record.noLyrics) {
           console.log(`[ASR Worker] 检测到无歌词，开始静默处理: ${record.name}`);
 
           let asrPromise = asrService.transcribe(record.data);
@@ -204,29 +307,78 @@ self.onmessage = async (e: MessageEvent) => {
           ]);
 
           // 处理 ASR 结果
-          if (asrResult.status === 'fulfilled' && asrResult.value && asrResult.value.utterances) {
-            let finalUtterances = asrResult.value.utterances;
+          if (asrResult.status === 'fulfilled' && asrResult.value && (asrResult.value as ASRResult).utterances) {
+            let finalUtterances: Utterance[] = (asrResult.value as ASRResult).utterances;
 
-            // 增强处理：如果拉取到了歌词，进行融合
-            if (lrcPromise && lrcResult.status === 'fulfilled' && lrcResult.value) {
-              const parsedLrc = parseNeteaseLrc(lrcResult.value);
-              finalUtterances = mergeLyrics(finalUtterances, parsedLrc);
-              console.log(`[ASR Worker] 网易云歌词校准完成`);
-            } else if (lrcPromise && lrcResult.status === 'rejected') {
-              console.error('[ASR Worker] 网易云歌词拉取最终失败', lrcResult.reason);
+            // 1. AI 校验 ASR 结果逻辑合理性
+            const isValidAsr = await validateAsrLyrics(asrResult.value);
+            console.log(`[ASR Worker] ASR 逻辑校验结果: ${isValidAsr}`);
+
+            const hasNeteaseLrc = lrcPromise && lrcResult.status === 'fulfilled' && lrcResult.value;
+
+            if (isValidAsr) {
+              // --- 分支 1: ASR 结果有效 ---
+              if (hasNeteaseLrc) {
+                // 有官方歌词 -> 走对齐比对逻辑 (逐字切分)
+                const parsedLrc = parseNeteaseLrc(lrcResult.value!);
+                finalUtterances = mergeLyrics(finalUtterances, parsedLrc);
+                console.log(`[ASR Worker] ASR 有效 & 官方歌词存在 -> 完成逐字对齐融合: ${record.name}`);
+              } else {
+                // 无官方歌词 -> 直接使用 ASR 结果 (包含切分)
+                console.log(`[ASR Worker] ASR 有效 & 无官方歌词 -> 使用原始 ASR 结果: ${record.name}`);
+              }
+            } else {
+              // --- 分支 2: ASR 结果无效 (乱码/噪音) ---
+              if (hasNeteaseLrc) {
+                // 有官方歌词 -> 放弃 ASR 映射，回退到纯文本模式 (无逐字切分)
+                const parsedLrc = parseNeteaseLrc(lrcResult.value!);
+                finalUtterances = parsedLrc.map(line => ({
+                  transcript: line.text,
+                  start_time: line.start_time,
+                  end_time: line.end_time,
+                  words: [{ label: line.text, start_time: line.start_time, end_time: line.end_time }]
+                }));
+                console.log(`[ASR Worker] ASR 乱码 & 官方歌词存在 -> 使用网易云文本保底 (无切分): ${record.name}`);
+              } else {
+                // 无官方歌词 -> 彻底标记为无歌词
+                console.warn(`[ASR Worker] ASR 乱码 & 无官方歌词 -> 标记为无歌词: ${record.name}`);
+                await db.music.update(record.id!, { noLyrics: true, lrcJson: [] });
+                self.postMessage({ type: 'UPDATE_SUCCESS', id: record.id });
+                continue;
+              }
             }
 
-            await db.music.update(record.id!, { lrcJson: finalUtterances });
-            console.log(`[ASR Worker] 歌曲处理成功，已入库: ${record.name},最终入库歌词：`, finalUtterances);
+            // 保存最终结果并重置标记
+            await db.music.update(record.id!, { lrcJson: finalUtterances, noLyrics: false });
+            console.log(`[ASR Worker] 歌词数据处理完成并入库: ${record.name}`);
+
+            // --- EmotionEngine 开始 ---
+            const fullText = finalUtterances.map(u => u.transcript).join('\n');
+            console.log(`[ASR Worker] 正在进行语义情感分析...`);
+            const emotionData = await analyzeLyricEmotion(fullText);
+            if (emotionData) {
+              await db.music.update(record.id!, { emotionJson: emotionData });
+              console.log(`[ASR Worker] 情感分析完成: ${record.name}`, emotionData);
+            }
+            // --- EmotionEngine 结束 ---
+
             self.postMessage({ type: 'UPDATE_SUCCESS', id: record.id });
           } else if (asrResult.status === 'rejected') {
             console.error(`[ASR Worker] 歌曲识别失败，跳过: ${record.name}`, asrResult.reason);
           }
-        } else {
-          console.log(`[ASR Worker] 已有歌词`, record.lrcJson);
+        } else if (!record.emotionJson) {
+          // 增量处理：已有歌词但没有情感数据
+          console.log(`[ASR Worker] 补全情感数据: ${record.name}`);
+          const fullText = (record.lrcJson as Utterance[]).map(u => u.transcript).join('\n');
+          const emotionData = await analyzeLyricEmotion(fullText);
+          if (emotionData) {
+            await db.music.update(record.id!, { emotionJson: emotionData });
+            console.log(`[ASR Worker] 情感补全完成: ${record.name}`);
+            self.postMessage({ type: 'UPDATE_SUCCESS', id: record.id });
+          }
         }
       }
-      console.log('[ASR Worker] 扫描并静默识别全部完成。');
+      console.log('[ASR Worker] 扫描并静默处理完成。');
     } catch (err) {
       console.error('[ASR Worker] 扫描数据库失败:', err);
     }

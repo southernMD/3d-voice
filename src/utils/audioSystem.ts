@@ -3,6 +3,7 @@ import { db } from './db';
 import { getVideoMsg, getVideoDowloadLink } from './bilibili';
 import { getNeteaseMusicMsg } from './netease';
 import { extractMusicInfo, searchAndGetBestMatchId } from './ai';
+import Meyda from 'meyda';
 
 /**
  * 音乐轨道接口
@@ -49,6 +50,11 @@ export class AudioSystem {
   public duration = ref(0);
   public volume = ref(0.7);
 
+  // Meyda 音频特征
+  public features = ref<any>(null);
+  public currentEmotion = ref<any>(null);
+  private meydaAnalyzer: any = null;
+
   /**
    * 初始化：从数据库加载缓存的音乐
    */
@@ -66,7 +72,7 @@ export class AudioSystem {
 
         // 自动触发补全：针对存量的本地或 B 站歌曲进行 AI 解析
         records.forEach(r => {
-          if (!r.uid.startsWith('netease') && !r.neteaseId && !r.lrcJson) {
+          if (!r.uid.startsWith('netease') && !r.neteaseId && !r.lrcJson && !r.noLyrics) {
             extractMusicInfo(r.name).then(async (info) => {
               if (info.name) {
                 console.log(`[AI 自动补全] ${r.name} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
@@ -203,17 +209,16 @@ export class AudioSystem {
           data: pureBlob
         });
 
-        // 异步提取 AI 音乐信息并同步关联网易云 ID
-        extractMusicInfo(file.name).then(async (info) => {
-          if (info.name) {
-            console.log(`[AI 解析] ${file.name} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
-            const bestId = await searchAndGetBestMatchId(info.name, info.artist);
-            if (bestId) {
-              await db.music.update(recordId, { neteaseId: bestId });
-              console.log(`[ID Sync] 成功关联网易云 ID: ${bestId}`);
-            }
+        // 提取 AI 音乐信息并同步关联网易云 ID
+        const info = await extractMusicInfo(file.name);
+        if (info.name) {
+          console.log(`[AI 解析] ${file.name} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
+          const bestId = await searchAndGetBestMatchId(info.name, info.artist, true);
+          if (bestId) {
+            await db.music.update(recordId, { neteaseId: bestId });
+            console.log(`[ID Sync] 成功关联网易云 ID: ${bestId}`);
           }
-        });
+        }
       } else {
         invalidFiles.push(file.name);
       }
@@ -270,17 +275,16 @@ export class AudioSystem {
       url: URL.createObjectURL(blob)
     };
 
-    // 异步提取 AI 音乐信息并同步关联网易云 ID
-    extractMusicInfo(title).then(async (info) => {
-      if (info.name) {
-        console.log(`[AI 解析] B站标题: ${title} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
-        const bestId = await searchAndGetBestMatchId(info.name, info.artist);
-        if (bestId) {
-          await db.music.update(recordId, { neteaseId: bestId });
-          console.log(`[ID Sync] 成功关联网易云 ID: ${bestId}`);
-        }
+    // 提取 AI 音乐信息并同步关联网易云 ID
+    const info2 = await extractMusicInfo(title);
+    if (info2.name) {
+      console.log(`[AI 解析] B站标题: ${title} -> 歌名: ${info2.name}, 歌手: ${info2.artist}`);
+      const bestId = await searchAndGetBestMatchId(info2.name, info2.artist, true);
+      if (bestId) {
+        await db.music.update(recordId, { neteaseId: bestId });
+        console.log(`[ID Sync] 成功关联网易云 ID: ${bestId}`);
       }
-    });
+    }
 
     this.playlist.value.push(track);
     if (this.currentIndex.value === -1) {
@@ -336,6 +340,7 @@ export class AudioSystem {
     try {
       const dbRecord = await db.music.where('uid').equals(track.id).first();
       this.currentLyrics.value = dbRecord?.lrcJson || null;
+      this.currentEmotion.value = dbRecord?.emotionJson || null;
     } catch (err) {
       console.error('加载歌词失败:', err);
     }
@@ -360,12 +365,36 @@ export class AudioSystem {
       if (this.audioTag) this.duration.value = this.audioTag.duration;
     };
 
-    this.audioTag.play().catch(err => {
+    this.audioTag.play().then(() => {
+      this.isPlaying.value = true;
+
+      // 初始化或重置 Meyda 分析器
+      if (this.meydaAnalyzer) {
+        this.meydaAnalyzer.stop();
+      }
+
+      this.meydaAnalyzer = Meyda.createMeydaAnalyzer({
+        audioContext: this.audioContext!,
+        source: sourceNode,
+        bufferSize: 512,
+        featureExtractors: [
+          'rms',
+          'spectralCentroid',
+          'loudness',
+          'perceptualSharpness',
+          'perceptualSpread',
+          'spectralRolloff',
+          'energy'
+        ],
+        callback: (features: any) => {
+          this.features.value = features;
+        }
+      });
+      this.meydaAnalyzer.start();
+    }).catch(err => {
       console.error('播放失败:', err);
       this.isPlaying.value = false;
     });
-
-    this.isPlaying.value = true;
 
     this.audioTag.onended = () => {
       if (this.playMode.value === PlayMode.SingleLoop) {
@@ -440,9 +469,12 @@ export class AudioSystem {
 
     if (this.isPlaying.value) {
       this.audioTag.pause();
+      this.meydaAnalyzer?.stop();
     } else {
       this.audioContext?.resume();
-      this.audioTag.play().catch(() => { });
+      this.audioTag.play().then(() => {
+        this.meydaAnalyzer?.start();
+      }).catch(() => { });
     }
     this.isPlaying.value = !this.isPlaying.value;
   }

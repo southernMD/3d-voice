@@ -10,6 +10,8 @@ export interface MusicRecord {
   data: Blob;  // 存储 Blob 二进制数据
   lrcJson?: any; // 存储解析后的歌词 JSON 数据
   neteaseId?: string; // 关联的网易云歌曲 ID
+  emotionJson?: any; // 存储语义情感分析数据
+  noLyrics?: boolean; // 标记该歌曲是否确认为无歌词
 }
 
 /**
