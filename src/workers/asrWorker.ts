@@ -192,6 +192,9 @@ self.onmessage = async (e: MessageEvent) => {
             const neteaseId = record.uid.replace(/netease\D*(\d+)/, '$1');
             console.log(`[ASR Worker] 正在拉取网易云官方歌词用于校准: ${neteaseId}`);
             lrcPromise = fetchLrcWithRetry(neteaseId, 3);
+          } else if (record.neteaseId) {
+            console.log(`[ASR Worker] 使用关联的网易云 ID 获取官方歌词进行校准: ${record.neteaseId}`);
+            lrcPromise = fetchLrcWithRetry(record.neteaseId, 3);
           }
 
           // 并行执行 ASR 和 歌词拉取

@@ -106,6 +106,25 @@ const bcutUploadProxyPlugin = () => ({
   }
 });
 
+// 自定义插件：拦截 AI 接口请求并校验 API Key
+const aiProxyPlugin = (apiKey?: string) => ({
+  name: 'ai-api-proxy',
+  configureServer(server: any) {
+    server.middlewares.use((req: any, res: any, next: any) => {
+      if (req.url?.startsWith('/ai-api')) {
+        if (!apiKey) {
+          console.error('[AI Proxy] 拒绝请求：未配置 AI_API_KEY 环境变量');
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Missing AI_API_KEY in environment variables' }));
+          return;
+        }
+      }
+      next();
+    });
+  }
+});
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // 加载环境变量
@@ -113,7 +132,12 @@ export default defineConfig(({ mode }) => {
   const musicResolveTarget = env.B23_RESOLVE_API || 'http://localhost:3000';
 
   return {
-    plugins: [vue(), biliProxyPlugin(), bcutUploadProxyPlugin()],
+    plugins: [
+      vue(), 
+      biliProxyPlugin(), 
+      bcutUploadProxyPlugin(),
+      aiProxyPlugin(env.AI_API_KEY)
+    ],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -165,6 +189,15 @@ export default defineConfig(({ mode }) => {
           headers: {
             'Referer': 'https://member.bilibili.com/',
             'Origin': 'https://member.bilibili.com'
+          }
+        },
+        // 代理 GLM-4 Flash AI 接口
+        '/ai-api': {
+          target: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/ai-api/, ''),
+          headers: {
+            'Authorization': `Bearer ${env.AI_API_KEY}`
           }
         }
       }

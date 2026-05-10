@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { db } from './db';
 import { getVideoMsg, getVideoDowloadLink } from './bilibili';
 import { getNeteaseMusicMsg } from './netease';
+import { extractMusicInfo, searchAndGetBestMatchId } from './ai';
 
 /**
  * 音乐轨道接口
@@ -180,10 +181,22 @@ export class AudioSystem {
           url: URL.createObjectURL(pureBlob)
         });
 
-        await db.music.add({
+        const recordId = await db.music.add({
           uid: uid,
           name: file.name,
           data: pureBlob
+        });
+
+        // 异步提取 AI 音乐信息并同步关联网易云 ID
+        extractMusicInfo(file.name).then(async (info) => {
+          if (info.name) {
+            console.log(`[AI 解析] ${file.name} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
+            const bestId = await searchAndGetBestMatchId(info.name, info.artist);
+            if (bestId) {
+              await db.music.update(recordId, { neteaseId: bestId });
+              console.log(`[ID Sync] 成功关联网易云 ID: ${bestId}`);
+            }
+          }
         });
       } else {
         invalidFiles.push(file.name);
@@ -228,7 +241,7 @@ export class AudioSystem {
     });
 
     const id = `bili-${bvid}`;
-    await db.music.add({
+    const recordId = await db.music.add({
       uid: id,
       name: title,
       data: blob,
@@ -240,6 +253,18 @@ export class AudioSystem {
       blob,
       url: URL.createObjectURL(blob)
     };
+
+    // 异步提取 AI 音乐信息并同步关联网易云 ID
+    extractMusicInfo(title).then(async (info) => {
+      if (info.name) {
+        console.log(`[AI 解析] B站标题: ${title} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
+        const bestId = await searchAndGetBestMatchId(info.name, info.artist);
+        if (bestId) {
+          await db.music.update(recordId, { neteaseId: bestId });
+          console.log(`[ID Sync] 成功关联网易云 ID: ${bestId}`);
+        }
+      }
+    });
 
     this.playlist.value.push(track);
     if (this.currentIndex.value === -1) {

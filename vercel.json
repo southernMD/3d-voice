@@ -12,6 +12,10 @@
   ],
   "rewrites": [
     {
+      "source": "/ai-api",
+      "destination": "/api/ai"
+    },
+    {
       "source": "/music-api/(.*)",
       "destination": "/api/resolve?path=$1"
     },
