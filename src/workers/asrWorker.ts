@@ -1,10 +1,29 @@
 import { db } from '@/utils/db';
 import { asrService } from '@/utils/asr';
 
+interface Word {
+  label: string;
+  start_time: number;
+  end_time: number;
+}
+
+interface Utterance {
+  start_time: number;
+  end_time: number;
+  transcript: string;
+  words: Word[];
+}
+
+interface NeteaseLrcLine {
+  start_time: number;
+  end_time: number;
+  text: string;
+}
+
 // 解析网易云 LRC 歌词
-function parseNeteaseLrc(lrcStr: string) {
+function parseNeteaseLrc(lrcStr: string): NeteaseLrcLine[] {
   const lines = lrcStr.split('\n');
-  const result: any[] = [];
+  const result: NeteaseLrcLine[] = [];
   // 匹配更广泛的 LRC 时间格式: [00:00.00], [0:00.00], [00:00]
   const regex = /\[(\d+):(\d+(?:\.\d+)?)\](.*)/;
 
@@ -16,7 +35,7 @@ function parseNeteaseLrc(lrcStr: string) {
       const timeMs = Math.round((min * 60 + sec) * 1000);
       const text = match[3].trim();
       if (text) {
-        result.push({ start_time: timeMs, text });
+        result.push({ start_time: timeMs, end_time: 0, text });
       }
     }
   }
@@ -30,18 +49,18 @@ function parseNeteaseLrc(lrcStr: string) {
 }
 
 // 智能分词：中文字符按字切分，英文字符按单词切分
-function tokenize(text: string) {
+function tokenize(text: string): string[] {
   // 匹配：中文字符 | 英文单词(含撇号)及其后的空格标点 | 其他非空白连续字符
   const regex = /[\u4e00-\u9fa5]|[a-zA-Z0-9']+(?:[^a-zA-Z0-9\u4e00-\u9fa5]+)?|[^\s\u4e00-\u9fa5a-zA-Z0-9']+/g;
   return text.match(regex) || [];
 }
 
 // 用 A歌词(官方LRC) 作为基准，将 B歌词(ASR结果) 映射融合进去
-function mergeLyrics(bLines: any[], aLines: any[]) {
+function mergeLyrics(bLines: Utterance[], aLines: NeteaseLrcLine[]): Utterance[] {
   if (!aLines || aLines.length === 0) return bLines;
 
   // 1. 提取所有 B 端的逐字数据到一个大池子里
-  const allBWords: any[] = [];
+  const allBWords: Word[] = [];
   for (const b of bLines) {
     if (b.words && b.words.length > 0) {
       allBWords.push(...b.words);
@@ -49,7 +68,7 @@ function mergeLyrics(bLines: any[], aLines: any[]) {
   }
 
   // 2. 将每个 B 端的字分配给与其重叠度最高的 A 端句子
-  const aToWords = new Map<number, any[]>();
+  const aToWords = new Map<number, Word[]>();
 
   for (const w of allBWords) {
     let bestAIndex = -1;
@@ -75,7 +94,7 @@ function mergeLyrics(bLines: any[], aLines: any[]) {
   }
 
   // 3. 遍历官方 A 歌词，填充文字并输出
-  const finalLines = [];
+  const finalLines: Utterance[] = [];
 
   for (let j = 0; j < aLines.length; j++) {
     const a = aLines[j];
@@ -87,7 +106,7 @@ function mergeLyrics(bLines: any[], aLines: any[]) {
       // 按照时间从小到大排序（确保歌词顺序正确）
       associatedWords.sort((x, y) => x.start_time - y.start_time);
 
-      const newWords = [];
+      const newWords: Word[] = [];
 
       if (tokens.length <= associatedWords.length) {
         // 情况 1: A端 Token 数小于等于 B端词位
