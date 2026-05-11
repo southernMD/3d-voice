@@ -384,7 +384,8 @@ export class AudioSystem {
           'perceptualSharpness',
           'perceptualSpread',
           'spectralRolloff',
-          'energy'
+          'energy',
+          'zcr'
         ],
         callback: (features: any) => {
           this.features.value = features;

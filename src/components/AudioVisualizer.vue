@@ -10,6 +10,7 @@ import ControlRow from './ControlRow.vue';
 import PlaylistPanel from './PlaylistPanel.vue';
 import DragUpload from './DragUpload.vue';
 import AsrWorker from '@/workers/asrWorker?worker';
+import LyricOverlay from './LyricOverlay.vue';
 
 // 引用与状态
 const container = ref<HTMLElement | null>(null);
@@ -35,11 +36,18 @@ const changePreset = (preset: any) => {
   localStorage.setItem('active_visualizer_preset', preset.name);
 };
 
+import { VisualEngine, type VisualState } from '@/utils/visualEngine';
+
 // 初始化系统 (单例)
 const audio = new AudioSystem();
 const view = new Visualizer();
+const visualEngine = new VisualEngine(); // 新增视觉引擎
 const viewport = useViewport();
 let animationId: number;
+
+// 视觉状态响应式引用
+const currentVisualState = ref<VisualState | null>(null);
+const currentLineIndex = ref(-1);
 
 // 逐字打印队列逻辑
 let wordQueue: any[] = [];
@@ -125,7 +133,45 @@ const animate = () => {
   const data = audio.getFrequencyData();
   view.update(data);
 
-  // 逐字歌词队列出队打印
+  // 1. 更新视觉引擎状态
+  if (audio.isPlaying.value) {
+    const features = audio.features.value;
+    const emotion = audio.currentEmotion.value; // 假设 AudioSystem 中存储了当前歌曲的情感数据
+    
+    // 计算当前行索引和持续时间
+    const timeMs = audio.currentTime.value * 1000;
+    let currentDuration = 1000;
+    if (audio.currentLyrics.value) {
+      const idx = audio.currentLyrics.value.findIndex(l => timeMs >= l.start_time && timeMs <= l.end_time);
+      if (idx !== -1) {
+        currentLineIndex.value = idx;
+        const line = audio.currentLyrics.value[idx];
+        currentDuration = line.end_time - line.start_time;
+      }
+    }
+
+    // 获取动态视觉参数
+    currentVisualState.value = visualEngine.update(features, emotion, currentLineIndex.value, currentDuration);
+    
+    // 这里可以将 currentVisualState 传递给 view (Three.js) 或更新 CSS 变量
+    if (currentVisualState.value) {
+        // 映射到全局 CSS 变量，供歌词组件使用
+        const s = currentVisualState.value;
+        const root = document.documentElement;
+        root.style.setProperty('--lyric-color', s.color);
+        root.style.setProperty('--lyric-scale', s.scale.toString());
+        root.style.setProperty('--lyric-shake', `${s.shake}px`);
+        root.style.setProperty('--lyric-opacity', s.opacity.toString());
+        root.style.setProperty('--lyric-glitch', s.glitch.toString());
+        root.style.setProperty('--lyric-brightness', s.brightness.toString());
+        
+        // 节奏因子映射
+        root.style.setProperty('--lyric-rhythm-weight', s.rhythmWeight.toString());
+        root.style.setProperty('--lyric-stretch', s.rhythmType === 'stretch' ? (s.rhythmWeight * 2).toString() : '0');
+    }
+  }
+
+  // 2. 逐字歌词队列出队打印
   if (audio.isPlaying.value && audio.currentLyrics.value) {
     const timeMs = audio.currentTime.value * 1000;
 
@@ -267,6 +313,13 @@ onMounted(() => {
     <DragUpload @dropped="handleDroppedFiles" />
 
     <div ref="container" class="three-container"></div>
+    
+    <LyricOverlay 
+      :lyrics="audio.currentLyrics.value" 
+      :currentTimeMs="audio.currentTime.value * 1000"
+      :activeLineIndex="currentLineIndex"
+      :emotionTag="currentVisualState?.tag"
+    />
     
     <div class="top-bar">
       <div class="branding">
