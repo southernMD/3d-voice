@@ -52,12 +52,8 @@ const getAnimationType = (lineIdx: number, wordIdx: number) => {
       class="lyric-line-wrapper"
       :key="activeLineIndex"
     >
-      <div v-if="!activeLine" class="no-lyrics">
-        <span class="placeholder-text">静听旋律...</span>
-      </div>
-
       <div 
-        v-else
+        v-if="activeLine"
         class="lyric-line active"
       >
         <template v-if="activeLine.words && activeLine.words.length > 0">

@@ -544,6 +544,17 @@ const handleSave = async () => {
 .side-toolbar {
   width: 280px; padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem;
   background: rgba(0, 0, 0, 0.2);
+  overflow-y: auto; padding-right: 12px;
+}
+
+/* 侧边栏滚动条美化 */
+.side-toolbar::-webkit-scrollbar { width: 4px; }
+.side-toolbar::-webkit-scrollbar-track { background: transparent; }
+.side-toolbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1); border-radius: 2px;
+}
+.side-toolbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 255, 0.3);
 }
 
 .group-title {
@@ -556,7 +567,7 @@ const handleSave = async () => {
 
 .id-input-wrap { margin-top: 1rem; }
 .tool-input {
-  width: 100%; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+  width: 80%; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 0.6rem; border-radius: 6px; color: white; font-size: 0.8rem; outline: none;
 }
 
