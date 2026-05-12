@@ -219,7 +219,15 @@ self.onmessage = async (e: MessageEvent) => {
             const isValidAsr = await baseValidateAsr(textToAnalyze);
             console.log(`[ASR Worker] ASR 逻辑校验结果: ${isValidAsr}`);
 
-            const hasNeteaseLrc = lrcPromise && lrcResult.status === 'fulfilled' && lrcResult.value;
+            // 保存原始 ASR 数据、审计状态以及网易云官方歌词(如有)
+            const hasNeteaseLrc = lrcPromise && lrcResult.status === 'fulfilled' && !!lrcResult.value;
+            const officialLrc = (lrcResult.status === 'fulfilled' && lrcResult.value) ? lrcResult.value : undefined;
+
+            await db.music.update(record.id!, {
+              asrJson: asrResult.value as ASRResult,
+              asrIsValid: isValidAsr,
+              lineLrc: officialLrc || undefined
+            });
 
             if (isValidAsr) {
               // --- 分支 1: ASR 结果有效 ---

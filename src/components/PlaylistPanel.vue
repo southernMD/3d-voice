@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'edit-lyrics', track: any): void;
 }>();
 
 // 搜索逻辑
@@ -115,6 +116,9 @@ const cancelRename = () => {
               <div class="bar"></div>
               <div class="bar"></div>
             </div>
+            <button class="action-btn" @click.stop="emit('edit-lyrics', track)" title="编辑歌词">
+              <i class="iconfont icon-bianji1"></i>
+            </button>
             <button class="action-btn" @click.stop="startRename(track.id, track.name)" title="重命名">
               <i class="iconfont icon-bianji"></i>
             </button>

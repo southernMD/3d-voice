@@ -8,6 +8,7 @@ import { useViewport } from '@/utils/viewport';
 import Drawer from './common/Drawer.vue';
 import ControlRow from './ControlRow.vue';
 import PlaylistPanel from './PlaylistPanel.vue';
+import LyricEditor from './LyricEditor.vue';
 import DragUpload from './DragUpload.vue';
 import AsrWorker from '@/workers/asrWorker?worker';
 import LyricOverlay from './LyricOverlay.vue';
@@ -18,6 +19,8 @@ import InputContent from './common/dialogs/InputContent.vue';
 const workerStatus = ref('');
 const container = ref<HTMLElement | null>(null);
 const playlistVisible = ref(false);
+const showLyricEditor = ref(false);
+const editingTrack = ref<any>(null);
 const showSettings = ref(false);
 const currentPresetName = ref('赛博环绕');
 
@@ -136,7 +139,18 @@ onUnmounted(() => {
   audio.dispose();
   view.dispose();
   viewport.destroy();
-});
+});const handleEditLyrics = (track: any) => {
+  editingTrack.value = track;
+  showLyricEditor.value = true;
+};
+
+const handleLyricSave = (trackId: string, updatedLines: any[]) => {
+  // 如果当前正在播放这首歌，立即刷新歌词
+  const currentTrack = audio.playlist.value[audio.currentIndex.value];
+  if (currentTrack && currentTrack.id === trackId) {
+    audio.currentLyrics.value = updatedLines;
+  }
+};
 
 const animate = () => {
   animationId = requestAnimationFrame(animate);
@@ -453,6 +467,15 @@ onMounted(() => {
       :audio="audio" 
       :visible="playlistVisible" 
       @close="playlistVisible = false" 
+      @edit-lyrics="handleEditLyrics"
+    />
+
+    <LyricEditor
+      :visible="showLyricEditor"
+      :track="editingTrack"
+      :audio="audio"
+      @close="showLyricEditor = false"
+      @save="handleLyricSave"
     />
   </div>
 </template>
