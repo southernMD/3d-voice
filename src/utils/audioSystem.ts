@@ -62,12 +62,12 @@ export class AudioSystem {
     try {
       this.playlist.value = [];
       const records = await db.music.toArray();
-      
+
       if (records && records.length > 0) {
         // 加载时进行终极去重，防止数据库里已经存在的脏数据
         const seen = new Set<string>();
         const uniqueTracks: Track[] = [];
-        
+
         for (const r of records) {
           if (!seen.has(r.uid)) {
             seen.add(r.uid);
@@ -198,7 +198,6 @@ export class AudioSystem {
    * 添加歌曲到列表（带格式校验，并将 File 转为 Blob 存入 Dexie）
    */
   public async addTracksWithValidation(files: File[]) {
-    const validTracks: Track[] = [];
     const invalidFiles: string[] = [];
 
     for (const file of files) {
@@ -212,7 +211,7 @@ export class AudioSystem {
         await db.music.where('uid').equals(uid).delete();
 
         // 2. 重新插入
-        recordId = await db.music.add({
+        const recordId = await db.music.add({
           uid: uid,
           name: file.name,
           data: pureBlob
@@ -285,7 +284,7 @@ export class AudioSystem {
     });
 
     const id = `bili-${bvid}`;
-    
+
     // 1. 数据库清理
     await db.music.where('uid').equals(id).delete();
 
@@ -342,7 +341,7 @@ export class AudioSystem {
     const blob = await this.fetchWithProgress(info.url, info.name);
 
     const uid = `netease-${info.id}`;
-    
+
     // 1. 数据库清理
     await db.music.where('uid').equals(uid).delete();
 
