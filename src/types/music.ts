@@ -29,9 +29,14 @@ export interface EmotionScore {
 
 export interface LyricEmotion {
   global: EmotionScore;
-  segments: { 
-    start: number; 
-    end: number; 
-    emotion: EmotionScore 
+  segments: {
+    start: number;
+    end: number;
+    emotion: EmotionScore
   }[];
+}
+
+export interface MusicInfo {
+  name: string | null;
+  artist: string | null;
 }

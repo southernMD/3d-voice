@@ -2,15 +2,14 @@ import { h, reactive } from 'vue';
 import { showConfirm } from '../components/common/ConfirmDialog';
 import MusicInfoEditContent from '../components/common/dialogs/MusicInfoEditContent.vue';
 import MusicSelectionContent from '../components/common/dialogs/MusicSelectionContent.vue';
-import { 
-    baseExtractMusicInfo, 
-    baseAnalyzeEmotion, 
-    baseValidateAsr,
-    type MusicInfo,
-    type LyricEmotion
+import {
+    baseExtractMusicInfo,
+    baseAnalyzeEmotion,
+    baseValidateAsr
 } from './ai-core';
+import type { LyricEmotion, MusicInfo } from '@/types/music';
 
-export type { MusicInfo, LyricEmotion };
+
 
 /**
  * 计算两个字符串的相似度 (基于编辑距离)
@@ -47,7 +46,7 @@ export function getSimilarity(s1: string, s2: string): number {
  */
 export async function extractMusicInfo(text: string, interactive: boolean = false): Promise<MusicInfo> {
     const info = await baseExtractMusicInfo(text);
-    
+
     // 如果处于交互模式且识别到了东西，允许用户手动编辑
     if (interactive && (info.name || info.artist)) {
         const state = reactive({ name: info.name || '', artist: info.artist || '' });
@@ -60,13 +59,13 @@ export async function extractMusicInfo(text: string, interactive: boolean = fals
                 'onUpdate:artist': (v: string) => state.artist = v
             })
         });
-        
+
         if (ok) {
             console.log(`[Manual Edit] 用户修改为: ${state.name} - ${state.artist}`);
             return { name: state.name, artist: state.artist };
         }
     }
-    
+
     return info;
 }
 
@@ -156,7 +155,7 @@ export async function analyzeLyricEmotion(lyrics: string): Promise<LyricEmotion 
  * 校验 ASR 识别结果
  */
 export async function validateAsrLyrics(asrData: any): Promise<boolean> {
-    const textToAnalyze = Array.isArray(asrData) 
+    const textToAnalyze = Array.isArray(asrData)
         ? asrData.map((item: any) => item.transcript).join('\n')
         : JSON.stringify(asrData);
     return await baseValidateAsr(textToAnalyze);

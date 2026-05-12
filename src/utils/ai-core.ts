@@ -2,24 +2,10 @@
  * AI 核心逻辑层 (纯逻辑，使用最完整的提示词版本)
  */
 
+import type { LyricEmotion, MusicInfo } from "@/types/music";
+
 const API_URL = "/ai-api";
 
-// --- 类型定义 ---
-export interface MusicInfo {
-    name: string | null;
-    artist: string | null;
-}
-
-export interface EmotionScore {
-    valence: number;
-    arousal: number;
-    tag: string;
-}
-
-export interface LyricEmotion {
-    global: EmotionScore;
-    segments: { start: number; end: number; emotion: EmotionScore }[];
-}
 
 // --- 完整提示词 (禁止删减) ---
 
@@ -119,7 +105,7 @@ export async function baseAnalyzeEmotion(lyrics: string): Promise<LyricEmotion |
         const lines = lyrics.split('\n');
         const userMsg = `歌词总行数: ${lines.length}\n歌词内容:\n${lyrics.slice(0, 3000)}`;
         const data = await fetchAI(EMOTION_PROMPT, userMsg);
-        
+
         if (data.choices?.[0]?.message?.content) {
             let aiResponse = data.choices[0].message.content.trim();
             if (aiResponse.toLowerCase() === 'null') return null;

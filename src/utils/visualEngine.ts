@@ -1,4 +1,4 @@
-import type { LyricEmotion, EmotionScore } from './ai';
+import type { LyricEmotion, EmotionScore } from '@/types/music';
 
 /**
  * 视觉参数输出接口
