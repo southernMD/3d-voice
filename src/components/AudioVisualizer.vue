@@ -8,7 +8,7 @@ import { useViewport } from '@/utils/viewport';
 import Drawer from './common/Drawer.vue';
 import ControlRow from './ControlRow.vue';
 import PlaylistPanel from './PlaylistPanel.vue';
-import LyricEditor from './LyricEditor.vue';
+import LyricEditor from '@/components/LrcEditor/LyricEditor.vue';
 import DragUpload from './DragUpload.vue';
 import AsrWorker from '@/workers/asrWorker?worker';
 import LyricOverlay from './LyricOverlay.vue';

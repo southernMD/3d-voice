@@ -40,3 +40,9 @@ export interface MusicInfo {
   name: string | null;
   artist: string | null;
 }
+
+export interface NeteaseLrcLine {
+  start_time: number;
+  end_time: number;
+  text: string;
+}

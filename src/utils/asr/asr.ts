@@ -12,13 +12,13 @@ export class ASRService {
   static async transcribe(blob: Blob): Promise<any> {
     try {
       console.log("[ASR] 正在直接调用必剪接口进行识别...");
-      
+
       const format = 'mp3';
       const arrayBuffer = await blob.arrayBuffer();
 
       const asr = new BcutASR();
       const result = await asr.transcribeBuffer(arrayBuffer, `audio.${format}`);
-      
+
       console.log("[ASR] 识别成功:", result);
       return result;
     } catch (err: any) {
