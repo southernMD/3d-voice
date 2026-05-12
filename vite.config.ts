@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { IncomingMessage } from 'http'
+import vueJsx from '@vitejs/plugin-vue-jsx';
 
 // 自定义插件：用于开发环境拦截并代理 bilibili 视频下载流
 const biliProxyPlugin = () => ({
@@ -36,7 +37,7 @@ const biliProxyPlugin = () => ({
               res.setHeader(key, value);
             }
           });
-          
+
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
           res.setHeader('Access-Control-Allow-Headers', 'X-Bili-Sessdata');
@@ -76,7 +77,7 @@ const bcutUploadProxyPlugin = () => ({
       if (req.url?.startsWith('/bcut-upload-proxy/')) {
         const match = req.url.match(/^\/bcut-upload-proxy\/(http|https)\/([^\/]+)(.*)$/);
         if (!match) return next();
-        
+
         const targetUrl = `${match[1]}://${match[2]}${match[3]}`;
 
         if (req.method === 'OPTIONS') {
@@ -110,7 +111,7 @@ const bcutUploadProxyPlugin = () => ({
               res.setHeader('Etag', etag);
               res.setHeader('Access-Control-Expose-Headers', 'Etag, etag');
             }
-            
+
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Access-Control-Allow-Methods', 'PUT, OPTIONS');
             res.statusCode = fetchRes.status;
@@ -156,10 +157,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      vue(), 
-      biliProxyPlugin(), 
+      vue(),
+      biliProxyPlugin(),
       bcutUploadProxyPlugin(),
-      aiProxyPlugin(env.AI_API_KEY)
+      aiProxyPlugin(env.AI_API_KEY),
+      vueJsx()
     ],
     resolve: {
       alias: {

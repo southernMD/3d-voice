@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, h, reactive } from 'vue';
 import { db } from '@/utils/db';
 import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
@@ -11,8 +11,11 @@ import PlaylistPanel from './PlaylistPanel.vue';
 import DragUpload from './DragUpload.vue';
 import AsrWorker from '@/workers/asrWorker?worker';
 import LyricOverlay from './LyricOverlay.vue';
+import { showConfirm } from './common/ConfirmDialog';
+import InputContent from './common/dialogs/InputContent.vue';
 
 // 引用与状态
+const workerStatus = ref('');
 const container = ref<HTMLElement | null>(null);
 const playlistVisible = ref(false);
 const showSettings = ref(false);
@@ -105,7 +108,12 @@ onMounted(async () => {
   worker.postMessage('START');
   
   worker.onmessage = async (e) => {
-    if (e.data?.type === 'UPDATE_SUCCESS') {
+    if (e.data.type === 'UPDATE_SUCCESS') {
+      audio.init();
+      // 成功后清空状态
+      setTimeout(() => {
+        workerStatus.value = '';
+      }, 3000);
       console.log(`[Main] 收到 Worker 识别成功通知, ID: ${e.data.id}`);
       // 检查更新的歌词是否属于正在播放的歌曲
       const currentTrack = audio.playlist.value[audio.currentIndex.value];
@@ -116,6 +124,8 @@ onMounted(async () => {
           console.log('[Main] 当前播放的歌曲歌词已在后台加载完毕并应用！');
         }
       }
+    } else if (e.data.type === 'STATUS') {
+      workerStatus.value = e.data.message;
     }
   };
 });
@@ -250,30 +260,64 @@ const onProgressClick = (e: MouseEvent) => {
 };
 
 const handleBilibiliImport = async () => {
-  const url = prompt('请输入 Bilibili 视频链接 (如: https://www.bilibili.com/video/BV...)');
-  if (!url) return;
+  const state = reactive({ url: '' });
+  const ok = await showConfirm({
+    title: '导入 Bilibili 视频',
+    content: () => h(InputContent, {
+      modelValue: state.url,
+      'onUpdate:modelValue': (v: string) => state.url = v,
+      label: '视频链接',
+      placeholder: 'https://www.bilibili.com/video/BV...'
+    })
+  });
 
-  try {
-    const track = await audio.addBiliTrack(url);
-    alert(`成功添加：${track.name}`);
-    worker.postMessage('START');
-  } catch (err) {
-    console.error('导入 B 站音频失败:', err);
-    alert('导入失败，请检查链接有效性或 CORS 限制。');
+  if (ok && state.url) {
+    try {
+      const track = await audio.addBiliTrack(state.url);
+      await showConfirm({
+        title: '导入成功',
+        content: `成功添加：${track.name}`,
+        cancelText: '关闭'
+      });
+      worker.postMessage('START');
+    } catch (err) {
+      await showConfirm({
+        title: '导入失败',
+        content: '请检查链接有效性或 B 站 Cookie 设置。',
+        cancelText: '关闭'
+      });
+    }
   }
 };
 
 const handleNeteaseImport = async () => {
-  const url = prompt('请输入网易云音乐链接 (如: https://music.163.com/#/song?id=...)');
-  if (!url) return;
+  const state = reactive({ url: '' });
+  const ok = await showConfirm({
+    title: '导入网易云音乐',
+    content: () => h(InputContent, {
+      modelValue: state.url,
+      'onUpdate:modelValue': (v: string) => state.url = v,
+      label: '歌曲链接',
+      placeholder: 'https://music.163.com/#/song?id=...'
+    })
+  });
 
-  try {
-    const track = await audio.addNeteaseTrack(url);
-    alert(`成功添加：${track.name}`);
-    worker.postMessage('START');
-  } catch (err) {
-    console.error('导入网易云音乐失败:', err);
-    alert('导入失败，该歌曲可能受版权保护或链接无效。');
+  if (ok && state.url) {
+    try {
+      const track = await audio.addNeteaseTrack(state.url);
+      await showConfirm({
+        title: '导入成功',
+        content: `成功添加：${track.name}`,
+        cancelText: '关闭'
+      });
+      worker.postMessage('START');
+    } catch (err) {
+      await showConfirm({
+        title: '导入失败',
+        content: '导入失败，该歌曲可能受版权保护或链接无效。',
+        cancelText: '关闭'
+      });
+    }
   }
 };
 
@@ -302,11 +346,16 @@ onMounted(() => {
 
 <template>
   <div class="visualizer-container">
-    <!-- 全局下载进度条 -->
-    <div class="global-download-progress" v-show="audio.downloadProgress.value > 0 || audio.downloadingName.value">
-      <div class="progress-inner" :style="{ width: audio.downloadProgress.value + '%' }"></div>
-      <div class="download-info" v-if="audio.downloadingName.value">
-        正在下载: {{ audio.downloadingName.value }} ({{ audio.downloadProgress.value.toFixed(0) }}%)
+    <!-- 全局进度提示 (下载 / AI 处理) -->
+    <div class="global-download-progress" v-show="audio.downloadProgress.value > 0 || audio.downloadingName.value || workerStatus">
+      <div class="progress-inner" :style="{ width: (audio.downloadProgress.value || (workerStatus ? 100 : 0)) + '%' }"></div>
+      <div class="download-info">
+        <template v-if="audio.downloadingName.value">
+          正在下载: {{ audio.downloadingName.value }} ({{ audio.downloadProgress.value.toFixed(0) }}%)
+        </template>
+        <template v-else-if="workerStatus">
+          {{ workerStatus }}
+        </template>
       </div>
     </div>
 
@@ -320,7 +369,7 @@ onMounted(() => {
       :activeLineIndex="currentLineIndex"
       :emotionTag="currentVisualState?.tag"
     />
-    
+      
     <div class="top-bar">
       <div class="branding">
         <h1 class="main-title">3D 沉浸式频谱</h1>

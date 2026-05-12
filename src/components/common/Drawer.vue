@@ -56,7 +56,7 @@ const emit = defineEmits<{
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100vh;
+  height:var(--visual-height, 100vh);
   z-index: 2000;
   pointer-events: none;
 }

@@ -3,6 +3,7 @@ import { db } from './db';
 import { getVideoMsg, getVideoDowloadLink } from './bilibili';
 import { getNeteaseMusicMsg } from './netease';
 import { extractMusicInfo, searchAndGetBestMatchId } from './ai';
+import { showConfirm } from '../components/common/ConfirmDialog';
 import Meyda from 'meyda';
 
 /**
@@ -250,7 +251,11 @@ export class AudioSystem {
     }
 
     if (invalidFiles.length > 0) {
-      alert(`以下文件无法解析为音频，已被忽略：\n${invalidFiles.join('\n')}`);
+      showConfirm({
+        title: '格式错误',
+        content: `以下文件无法解析为音频，已被忽略：\n${invalidFiles.join('\n')}`,
+        cancelText: '关闭'
+      });
     }
 
     if (this.currentIndex.value === -1 && this.playlist.value.length > 0) {

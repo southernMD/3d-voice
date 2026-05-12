@@ -1,0 +1,84 @@
+.overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: var(--visual-height, 100vh);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10000;
+  opacity: 0; transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal {
+  width: 360px;
+  padding: 1.8rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(20, 20, 20, 0.7);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.05);
+  transform: translateY(20px) scale(0.95); 
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+.overlay.show .modal {
+  transform: translateY(0) scale(1);
+}
+
+.header h3 {
+  margin: 0 0 1.2rem 0; 
+  font-weight: 300; 
+  font-size: 1.2rem; 
+  letter-spacing: 0.1rem;
+  color: #00ffff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+.body {
+  margin-bottom: 2rem; 
+  line-height: 1.6; 
+  color: rgba(255, 255, 255, 0.8); 
+  font-size: 0.95rem;
+  font-weight: 300;
+}
+
+.footer {
+  display: flex; justify-content: flex-end; gap: 1rem;
+}
+
+.btn {
+  padding: 0.6rem 1.5rem; border-radius: 10px; border: none; cursor: pointer; font-size: 0.85rem; transition: all 0.3s ease;
+  font-family: 'Inter', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05rem;
+}
+
+.btnCancel {
+  background: rgba(255, 255, 255, 0.05); 
+  color: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btnCancel:hover { 
+  background: rgba(255, 255, 255, 0.1); 
+  color: white; 
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btnOk {
+  background: linear-gradient(135deg, #00ffff, #0088ff); 
+  color: #000; 
+  font-weight: 600;
+  box-shadow: 0 4px 15px rgba(0, 255, 255, 0.2);
+}
+
+.btnOk:hover { 
+  transform: translateY(-2px); 
+  box-shadow: 0 8px 25px rgba(0, 255, 255, 0.4); 
+  filter: brightness(1.1);
+}

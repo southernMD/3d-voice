@@ -12,9 +12,10 @@ import AudioVisualizer from './components/AudioVisualizer.vue';
 main {
   user-select: none;
   width: 100vw;
-  height: 100vh;
+  height: var(--visual-height, 100vh);
   margin: 0;
   padding: 0;
+  overflow: hidden;
 }
 
 body {
