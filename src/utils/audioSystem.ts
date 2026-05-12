@@ -234,8 +234,8 @@ export class AudioSystem {
           });
         }
 
-        // 提取 AI 音乐信息并同步关联网易云 ID
-        const info = await extractMusicInfo(file.name);
+        // 4. 自动补全歌词（但不下载网易云音频，只取歌词）
+        const info = await extractMusicInfo(file.name, true);
         if (info.name) {
           console.log(`[AI 解析] ${file.name} -> 歌名: ${info.name}, 歌手: ${info.artist}`);
           const bestId = await searchAndGetBestMatchId(info.name, info.artist, true);
@@ -313,8 +313,8 @@ export class AudioSystem {
 
     const track = this.playlist.value.find(t => t.id === id)!;
 
-    // 提取 AI 音乐信息并同步关联网易云 ID
-    const info2 = await extractMusicInfo(title);
+    // 4. 自动补全歌词
+    const info2 = await extractMusicInfo(title, true);
     if (info2.name) {
       console.log(`[AI 解析] B站标题: ${title} -> 歌名: ${info2.name}, 歌手: ${info2.artist}`);
       const bestId = await searchAndGetBestMatchId(info2.name, info2.artist, true);

@@ -25,7 +25,7 @@ export interface MusicInfo {
 /**
  * 使用 AI 提取文本中的歌曲名和歌手
  */
-export async function extractMusicInfo(text: string): Promise<MusicInfo> {
+export async function extractMusicInfo(text: string, interactive: boolean = false): Promise<MusicInfo> {
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
@@ -59,10 +59,23 @@ export async function extractMusicInfo(text: string): Promise<MusicInfo> {
                     const parsed = JSON.parse(finalJson);
 
                     // 确保返回标准格式
-                    return {
-                        name: parsed.name || null,
-                        artist: parsed.artist || null
-                    };
+                    let name = parsed.name || null;
+                    let artist = parsed.artist || null;
+
+                    // 如果处于交互模式，允许用户手动编辑
+                    if (interactive && (name || artist)) {
+                        const defaultVal = `${name || ''} - ${artist || ''}`.replace(/^ - | - $/g, '');
+                        const userInput = window.prompt(`AI 识别到歌曲信息如下，您可以手动微调：\n(格式: 歌名 - 歌手)`, defaultVal);
+                        
+                        if (userInput && userInput !== defaultVal) {
+                            const parts = userInput.split('-').map(p => p.trim());
+                            name = parts[0] || null;
+                            artist = parts[1] || null;
+                            console.log(`[Manual Edit] 用户修改为: ${name} - ${artist}`);
+                        }
+                    }
+
+                    return { name, artist };
                 } catch (e) {
                     console.error("[AI] JSON 解析失败:", e);
                 }
