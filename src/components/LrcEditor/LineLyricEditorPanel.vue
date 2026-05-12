@@ -182,7 +182,7 @@ const handleExportLrc = () => {
         <div class="group-title">获取模式</div>
         <div class="radio-options">
           <label class="radio-item">
-            <input type="radio" v-model="fetchMode" value="auto"> 智能匹配 (AI)
+            <input type="radio" v-model="fetchMode" value="auto"> 智能匹配
           </label>
           <label class="radio-item">
             <input type="radio" v-model="fetchMode" value="manual"> 网易云 ID

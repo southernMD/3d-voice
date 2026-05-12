@@ -173,7 +173,7 @@ const handleFileUpload = (e: Event) => {
           <div class="group-title">获取模式</div>
           <div class="radio-options">
             <label class="radio-item">
-              <input type="radio" v-model="fetchMode" value="auto"> AI 自动生成 (必剪 ASR)
+              <input type="radio" v-model="fetchMode" value="auto">自动生成
             </label>
             <label class="radio-item">
               <input type="radio" v-model="fetchMode" value="upload"> 上传分词文件

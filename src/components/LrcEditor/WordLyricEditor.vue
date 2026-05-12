@@ -61,10 +61,32 @@ const addWord = (lineIdx: number) => {
   
   line.words.push({
     start_time: startTime,
-    end_time: startTime + 200,
+    end_time: startTime,
     label: '新词'
   });
   
+  emit('update', newUtterances);
+};
+
+// 删除词：时间归还给前一个词（若无前词则归还给后一个词）
+const deleteWord = (lineIdx: number, wordIdx: number) => {
+  const newUtterances = JSON.parse(JSON.stringify(props.utterances));
+  const words = newUtterances[lineIdx].words;
+  
+  if (words.length <= 1) return; // 至少保留一个词
+  
+  const removed = words[wordIdx];
+  
+  if (wordIdx > 0) {
+    // 前一个词吞并被删词的时间
+    words[wordIdx - 1].end_time = removed.end_time;
+  } else if (words.length > 1) {
+    // 无前词，后一个词继承起始时间
+    words[1].start_time = removed.start_time;
+  }
+  
+  words.splice(wordIdx, 1);
+  newUtterances[lineIdx].end_time = words[words.length - 1].end_time;
   emit('update', newUtterances);
 };
 
@@ -130,13 +152,18 @@ watch(() => props.currentTime, (time) => {
           </div>
 
           <div class="word-duration-label">{{ word.end_time - word.start_time }}ms</div>
-          
+
+          <!-- 删除按钮：hover 时显示 -->
+          <button class="btn-delete-word" @click.stop="deleteWord(lIdx, wIdx)" title="删除此词">
+            <i class="iconfont icon-guanbi_o"></i>
+          </button>
+
           <div class="word-glow" v-if="isWordActive(word)"></div>
         </div>
 
         <!-- 末尾加词按钮 -->
         <button class="chip-add-btn" @click="addWord(lIdx)" title="在该行末尾添加词">
-          <i class="iconfont icon-plus"></i>
+          <i class="iconfont icon-jiahao_o"></i>
         </button>
       </div>
     </div>
@@ -199,6 +226,20 @@ watch(() => props.currentTime, (time) => {
   font-size: 9px; color: rgba(255, 255, 255, 0.2); font-family: monospace;
   margin-left: 4px; border-left: 1px solid rgba(255, 255, 255, 0.1); padding-left: 6px;
 }
+
+/* 删除词按钮 */
+.btn-delete-word {
+  display: none; /* 默认隐藏 */
+  background: none; border: none;
+  color: rgba(255, 80, 80, 0.6); cursor: pointer; padding: 0;
+  font-size: 10px; line-height: 1; align-items: center;
+  margin-left: 2px;
+}
+.btn-delete-word i { font-size: 10px; }
+.btn-delete-word:hover { color: #ff4444; }
+
+/* 词块 hover 时显示删除按钮 */
+.word-chip:hover .btn-delete-word { display: flex; }
 
 /* 末尾加词按钮 */
 .chip-add-btn {
