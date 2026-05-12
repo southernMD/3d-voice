@@ -303,7 +303,7 @@ onMounted(() => {
 <template>
   <div class="visualizer-container">
     <!-- 全局下载进度条 -->
-    <div class="global-download-progress" v-show="audio.downloadProgress.value > 0">
+    <div class="global-download-progress" v-show="audio.downloadProgress.value > 0 || audio.downloadingName.value">
       <div class="progress-inner" :style="{ width: audio.downloadProgress.value + '%' }"></div>
       <div class="download-info" v-if="audio.downloadingName.value">
         正在下载: {{ audio.downloadingName.value }} ({{ audio.downloadProgress.value.toFixed(0) }}%)

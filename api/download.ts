@@ -24,6 +24,7 @@ export default async function handler(req: Request) {
     newHeaders.set('Access-Control-Allow-Origin', '*');
     newHeaders.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
     newHeaders.set('Access-Control-Allow-Headers', 'X-Bili-Sessdata');
+    newHeaders.set('Access-Control-Expose-Headers', 'Content-Length, Content-Type, Accept-Ranges');
 
     return new Response(response.body, {
       status: response.status,

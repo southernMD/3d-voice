@@ -29,11 +29,34 @@ const biliProxyPlugin = () => ({
             }
           });
 
-          res.setHeader('Content-Type', fetchRes.headers.get('Content-Type') || 'application/octet-stream');
+          // 转发关键响应头
+          fetchRes.headers.forEach((value, key) => {
+            const lowerKey = key.toLowerCase();
+            if (['content-type', 'content-length', 'accept-ranges', 'content-range'].includes(lowerKey)) {
+              res.setHeader(key, value);
+            }
+          });
+          
           res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'X-Bili-Sessdata');
 
-          const arrayBuffer = await fetchRes.arrayBuffer();
-          res.end(Buffer.from(arrayBuffer));
+          if (!fetchRes.body) {
+            res.end();
+            return;
+          }
+
+          // 流式传输
+          const reader = fetchRes.body.getReader();
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(Buffer.from(value));
+            }
+          } finally {
+            res.end();
+          }
         } catch (err) {
           res.statusCode = 500;
           res.end(String(err));

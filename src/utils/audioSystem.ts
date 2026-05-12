@@ -60,15 +60,26 @@ export class AudioSystem {
    */
   public async init() {
     try {
+      this.playlist.value = [];
       const records = await db.music.toArray();
+      
       if (records && records.length > 0) {
-        const cachedTracks: Track[] = records.map(r => ({
-          id: r.uid,
-          name: r.name,
-          blob: r.data,
-          url: URL.createObjectURL(r.data)
-        }));
-        this.playlist.value.push(...cachedTracks);
+        // 加载时进行终极去重，防止数据库里已经存在的脏数据
+        const seen = new Set<string>();
+        const uniqueTracks: Track[] = [];
+        
+        for (const r of records) {
+          if (!seen.has(r.uid)) {
+            seen.add(r.uid);
+            uniqueTracks.push({
+              id: r.uid,
+              name: r.name,
+              blob: r.data,
+              url: URL.createObjectURL(r.data)
+            });
+          }
+        }
+        this.playlist.value = uniqueTracks;
 
         // 自动触发补全：针对存量的本地或 B 站歌曲进行 AI 解析
         records.forEach(r => {
@@ -193,21 +204,36 @@ export class AudioSystem {
     for (const file of files) {
       const isValid = await this.validateAudio(file);
       if (isValid) {
-        const uid = Math.random().toString(36).substring(2, 9);
+        // 使用文件名作为确定性 UID
+        const uid = `local-${file.name}`;
         const pureBlob = new Blob([file], { type: file.type });
 
-        validTracks.push({
-          id: uid,
-          name: file.name,
-          blob: pureBlob,
-          url: URL.createObjectURL(pureBlob)
-        });
+        // 1. 数据库清理：删掉所有同名 UID 的旧记录（保证数据库干净）
+        await db.music.where('uid').equals(uid).delete();
 
-        const recordId = await db.music.add({
+        // 2. 重新插入
+        recordId = await db.music.add({
           uid: uid,
           name: file.name,
           data: pureBlob
-        });
+        }) as number;
+
+        // 3. 内存列表维护：如果已存在则原地更新，不存在则 push
+        const trackIdx = this.playlist.value.findIndex(t => t.id === uid);
+        if (trackIdx !== -1) {
+          console.log(`[Memory] 更新已存在音轨: ${file.name}`);
+          URL.revokeObjectURL(this.playlist.value[trackIdx].url);
+          this.playlist.value[trackIdx].blob = pureBlob;
+          this.playlist.value[trackIdx].url = URL.createObjectURL(pureBlob);
+          this.playlist.value[trackIdx].name = file.name;
+        } else {
+          this.playlist.value.push({
+            id: uid,
+            name: file.name,
+            blob: pureBlob,
+            url: URL.createObjectURL(pureBlob)
+          });
+        }
 
         // 提取 AI 音乐信息并同步关联网易云 ID
         const info = await extractMusicInfo(file.name);
@@ -228,11 +254,8 @@ export class AudioSystem {
       alert(`以下文件无法解析为音频，已被忽略：\n${invalidFiles.join('\n')}`);
     }
 
-    if (validTracks.length > 0) {
-      this.playlist.value.push(...validTracks);
-      if (this.currentIndex.value === -1) {
-        this.playTrack(this.playlist.value.length - validTracks.length);
-      }
+    if (this.currentIndex.value === -1 && this.playlist.value.length > 0) {
+      this.playTrack(0);
     }
   }
 
@@ -262,18 +285,34 @@ export class AudioSystem {
     });
 
     const id = `bili-${bvid}`;
+    
+    // 1. 数据库清理
+    await db.music.where('uid').equals(id).delete();
+
+    // 2. 重新插入
     const recordId = await db.music.add({
       uid: id,
       name: title,
       data: blob,
-    });
+    }) as number;
 
-    const track: Track = {
-      id,
-      name: title,
-      blob,
-      url: URL.createObjectURL(blob)
-    };
+    // 3. 内存列表维护
+    const trackIdx = this.playlist.value.findIndex(t => t.id === id);
+    if (trackIdx !== -1) {
+      URL.revokeObjectURL(this.playlist.value[trackIdx].url);
+      this.playlist.value[trackIdx].blob = blob;
+      this.playlist.value[trackIdx].url = URL.createObjectURL(blob);
+      this.playlist.value[trackIdx].name = title;
+    } else {
+      this.playlist.value.push({
+        id,
+        name: title,
+        blob,
+        url: URL.createObjectURL(blob)
+      });
+    }
+
+    const track = this.playlist.value.find(t => t.id === id)!;
 
     // 提取 AI 音乐信息并同步关联网易云 ID
     const info2 = await extractMusicInfo(title);
@@ -286,9 +325,9 @@ export class AudioSystem {
       }
     }
 
-    this.playlist.value.push(track);
     if (this.currentIndex.value === -1) {
-      this.playTrack(this.playlist.value.length - 1);
+      const idx = this.playlist.value.findIndex(t => t.id === id);
+      if (idx !== -1) this.playTrack(idx);
     }
     return track;
   }
@@ -303,24 +342,34 @@ export class AudioSystem {
     const blob = await this.fetchWithProgress(info.url, info.name);
 
     const uid = `netease-${info.id}`;
+    
+    // 1. 数据库清理
+    await db.music.where('uid').equals(uid).delete();
+
+    // 2. 重新插入
     await db.music.add({
       uid,
       name: `${info.name} - ${info.artist}`,
       data: blob,
     });
 
-    const track: Track = {
-      id: uid,
-      name: `${info.name} - ${info.artist}`,
-      blob,
-      url: URL.createObjectURL(blob)
-    };
-
-    this.playlist.value.push(track);
-    if (this.currentIndex.value === -1) {
-      this.playTrack(this.playlist.value.length - 1);
+    // 3. 内存列表维护
+    const trackIdx = this.playlist.value.findIndex(t => t.id === uid);
+    if (trackIdx !== -1) {
+      URL.revokeObjectURL(this.playlist.value[trackIdx].url);
+      this.playlist.value[trackIdx].blob = blob;
+      this.playlist.value[trackIdx].url = URL.createObjectURL(blob);
+      this.playlist.value[trackIdx].name = `${info.name} - ${info.artist}`;
+    } else {
+      this.playlist.value.push({
+        id: uid,
+        name: `${info.name} - ${info.artist}`,
+        blob,
+        url: URL.createObjectURL(blob)
+      });
     }
-    return track;
+
+    return this.playlist.value.find(t => t.id === uid)!;
   }
 
   /**

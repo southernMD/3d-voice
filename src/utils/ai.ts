@@ -140,7 +140,10 @@ export async function searchAndGetBestMatchId(name: string, artist: string | nul
         }
 
         // 置信度系统处理
-        if (maxSim > 0.4) {
+        // 如果没有歌手信息且开启了交互模式，强制弹出选择框（防止匹配到同名不同歌手的歌）
+        const forceManual = interactive && !artist;
+
+        if (maxSim > 0.4 && !forceManual) {
             return bestId;
         } else if (interactive && results.length > 0) {
             // 置信度过低且开启了交互模式
