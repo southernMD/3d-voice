@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, h, reactive } from 'vue';
-import { db } from '@/utils/db';
+import { db, type MusicRecord } from '@/utils/db';
 import { AudioSystem } from '@/utils/audioSystem';
 import { Visualizer } from '@/utils/visualizer';
 import { TunnelPreset, SymmetricTunnelPreset, SpherePreset } from '@/utils/visualizer/presets';
@@ -61,7 +61,7 @@ let lastTimeMs = 0;
 
 // 扁平化歌词并初始化队列
 const resetWordQueue = (startTimeMs = 0) => {
-  if (!audio.currentLyrics.value) {
+  if (!Array.isArray(audio.currentLyrics.value)) {
     wordQueue = [];
     return;
   }
@@ -139,16 +139,20 @@ onUnmounted(() => {
   audio.dispose();
   view.dispose();
   viewport.destroy();
-});const handleEditLyrics = (track: any) => {
+});
+
+const handleEditLyrics = (track: MusicRecord) => {
   editingTrack.value = track;
   showLyricEditor.value = true;
 };
 
-const handleLyricSave = (trackId: string, updatedLines: any[]) => {
+const handleLyricSave = (trackId: string, updateData: Partial<MusicRecord>) => {
   // 如果当前正在播放这首歌，立即刷新歌词
   const currentTrack = audio.playlist.value[audio.currentIndex.value];
   if (currentTrack && currentTrack.id === trackId) {
-    audio.currentLyrics.value = updatedLines;
+    // 关键修复：从保存的对象中提取 lrcJson 数组
+    audio.currentLyrics.value = updateData.lrcJson || [];
+    console.log('[Main] 已实时应用保存的新歌词数据');
   }
 };
 

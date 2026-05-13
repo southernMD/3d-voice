@@ -75,10 +75,15 @@ const handleSave = async () => {
   if (!props.track || !props.track.id) return;
   isSaving.value = true;
   try {
+    // 关键修复：脱敏 Proxy 状态并同步到 lrcJson 数组
+    const cleanAsr = asrJson.value ? JSON.parse(JSON.stringify(asrJson.value)) : undefined;
+
     const updateData: Partial<MusicRecord> = {
       noLyrics: noLyrics.value,
       lineLrc: lineLrc.value,
-      asrJson: asrJson.value,
+      asrJson: cleanAsr,
+      // 必须确保 lrcJson 是个数组，AudioSystem 依赖它
+      lrcJson: cleanAsr?.utterances || [],
       neteaseId: neteaseId.value
     };
 
@@ -93,6 +98,11 @@ const handleSave = async () => {
       .modify(updateData);
 
     if (updatedCount > 0) {
+      // 实时更新音频系统的当前歌词，确保 UI 立即响应
+      if (isCorrectTrack.value) {
+        props.audio.currentLyrics.value = updateData.lrcJson;
+      }
+      
       emit('save', String(props.track.id), updateData);
       emit('close');
     } else {

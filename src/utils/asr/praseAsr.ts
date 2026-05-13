@@ -113,6 +113,12 @@ export function mergeLyrics(bLines: UtteranceRecord[], aLines: NeteaseLrcLine[])
                 }
             }
 
+            // 核心修复：强制让最后一个词的结束时间等于整句的结束时间
+            // 防止因 ASR 尾部静音导致最后一个词提前消失
+            if (newWords.length > 0) {
+                newWords[newWords.length - 1].end_time = a.end_time;
+            }
+
             finalLines.push({
                 transcript: AText,
                 start_time: Math.min(a.start_time, associatedWords[0].start_time),

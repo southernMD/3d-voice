@@ -129,7 +129,7 @@ const handleGenerateAsr = async () => {
 
   try {
     // 直接从数据库查音频 Blob
-    const record = await db.music.get(props.track.id);
+    const record = await db.music.where("uid").equals(props.track.id).first();
     if (!record || !record.data) throw new Error('数据库中未找到音频数据');
 
     // 调用必剪 ASR
