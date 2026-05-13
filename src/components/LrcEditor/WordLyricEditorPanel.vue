@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { db } from '@/utils/db';
+import { showConfirm } from '@/components/common/ConfirmDialog';
 import { asrService } from '@/utils/asr/asr';
 import { parseNeteaseLrc, mergeLyrics } from '@/utils/asr/praseAsr';
 import WordLyricEditor from './WordLyricEditor.vue';
@@ -10,6 +11,7 @@ const props = defineProps<{
   track: MusicRecord | null;
   audio: any;
   lineLrc: string; // 用于对齐的逐行歌词
+  isCorrectTrack: boolean; // 新增：当前是否是正确音轨
 }>();
 
 const asrJson = defineModel<any>('asrJson', { default: undefined });
@@ -31,19 +33,66 @@ const handleWordUpdate = (newUtterances: any[]) => {
   asrJson.value = { ...asrJson.value, utterances: newUtterances };
 };
 
-// 开始录制
-const startRecord = (lineIdx: number) => {
+// 循环播放停止函数
+let loopStop: (() => void) | null = null;
+
+// 开始录制 + 启动区间循环播放
+const startRecord = async (lineIdx: number) => {
+  stopRecord()
+  const line = asrJson.value?.utterances?.[lineIdx];
+  if (!line) return;
+
+  // 1. 播放状态与音轨一致性校验
+  if (!props.isCorrectTrack) {
+    const ok = await showConfirm({
+      title: '播放提示',
+      content: '当前未播放此歌曲，是否立即开始播放并开始录制？'
+    });
+    
+    if (ok && props.track) {
+      const idx = props.audio.playlist.value.findIndex((t: any) => t.id === props.track?.id);
+      if (idx !== -1) {
+        props.audio.playTrack(idx);
+        // 关键：切换歌曲后需要给一点时间让音频加载，否则 seek 会失效
+        // 也可以等待 isCorrectTrack 变为 true 的 watch，但这里用延时比较简单直接
+        await new Promise(r => setTimeout(r, 500)); 
+      } else {
+        return;
+      }
+    } else {
+      return;
+    }
+  }
+
+  // 停止上一次的循环
+  if (loopStop) { loopStop(); loopStop = null; }
+
   recordingLineIdx.value = lineIdx;
   recordingWordIdx.value = 0;
   recordingMarks.value = [];
 
-  const line = asrJson.value?.utterances?.[lineIdx];
-  if (line) {
-    props.audio.seek(line.start_time / 1000);
-    if (props.audio.isPaused?.value) {
-      props.audio.togglePlay();
-    }
+  // 跳转到行首并开始播放
+  props.audio.seek(line.start_time / 1000);
+  if (props.audio.isPaused?.value) {
+    props.audio.togglePlay();
   }
+
+  // 监听播放时间，超出行尾就循环回行首
+  loopStop = watch(
+    () => props.audio.currentTime.value,
+    (currentSec: number) => {
+      const currentMs = currentSec * 1000;
+      if (currentMs >= line.end_time) {
+        props.audio.seek(line.start_time / 1000);
+      }
+    }
+  );
+};
+
+// 退出录制时停止循环
+const stopRecord = () => {
+  if (loopStop) { loopStop(); loopStop = null; }
+  recordingLineIdx.value = -1;
 };
 
 // 工具栏打点触发
@@ -53,7 +102,8 @@ const handleSidebarTap = () => {
   const currentLine = asrJson.value?.utterances?.[recordingLineIdx.value];
   if (!currentLine) return;
 
-  recordingMarks.value.push(props.audio.currentTime.value * 1000);
+  // 打点时间保留整数 (ms)
+  recordingMarks.value.push(Math.round(props.audio.currentTime.value * 1000));
   recordingWordIdx.value++;
 
   if (recordingWordIdx.value >= currentLine.words.length) {
@@ -68,7 +118,7 @@ const handleSidebarTap = () => {
     }
 
     asrJson.value = { ...asrJson.value, utterances: newUtterances };
-    recordingLineIdx.value = -1;
+    stopRecord(); // 录制完成，停止循环
   }
 };
 
@@ -146,23 +196,11 @@ const handleFileUpload = (e: Event) => {
     <div class="panel-toolbar">
       <!-- 录制控制台 -->
       <div v-if="recordingLineIdx !== -1" class="record-console">
-        <div class="group-title">正在录制第 {{ recordingLineIdx + 1 }} 句</div>
-
-        <div class="record-progress">
-          进度: {{ recordingWordIdx }} / {{ asrJson?.utterances[recordingLineIdx]?.words.length }}
-        </div>
-
-        <div class="next-word-hint">
-          下一个词: <span>{{ asrJson?.utterances[recordingLineIdx]?.words[recordingWordIdx]?.label || '完成' }}</span>
-        </div>
-
         <button class="btn-tap-large" @mousedown="handleSidebarTap">
           点击打点
         </button>
 
-        <p class="tool-info">跟着节奏点击上方大按钮记录时间点。</p>
-
-        <button class="btn-tool-action btn-secondary-tool" @click="recordingLineIdx = -1">
+        <button class="btn-tool-action btn-secondary-tool" @click="stopRecord">
           退出录制
         </button>
       </div>

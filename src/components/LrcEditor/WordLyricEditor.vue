@@ -17,6 +17,43 @@ const emit = defineEmits<{
 
 const containerRef = ref<HTMLElement | null>(null);
 
+// 拖拽排序状态
+const dragStatus = ref<{ lIdx: number; wIdx: number } | null>(null);
+
+const handleDragStart = (lIdx: number, wIdx: number) => {
+  dragStatus.value = { lIdx, wIdx };
+};
+
+const handleDragOver = (e: DragEvent) => {
+  e.preventDefault(); // 允许放置
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+};
+
+const handleDrop = (targetLIdx: number, targetWIdx: number) => {
+  if (!dragStatus.value) return;
+  const { lIdx: sourceLIdx, wIdx: sourceWIdx } = dragStatus.value;
+  
+  // 仅支持行内拖拽排序（跨行排序逻辑较复杂且容易出错，先限制在行内）
+  if (sourceLIdx !== targetLIdx || sourceWIdx === targetWIdx) {
+    dragStatus.value = null;
+    return;
+  }
+
+  const newUtterances = JSON.parse(JSON.stringify(props.utterances));
+  const words = newUtterances[targetLIdx].words;
+  
+  // 执行数组移动
+  const [removed] = words.splice(sourceWIdx, 1);
+  words.splice(targetWIdx, 0, removed);
+  
+  // 拖拽后自动重新分配时间（可选，这里保持原有时间点，仅移动位置）
+  // 如果需要时间也跟着走，可能需要更复杂的逻辑，目前先保持词内容移动
+  
+  syncTranscript(newUtterances[targetLIdx]);
+  emit('update', newUtterances);
+  dragStatus.value = null;
+};
+
 /**
  * 边界调整逻辑：增加当前词时长，减少下一个词时长
  * delta > 0: 向后推边界
@@ -52,11 +89,17 @@ const adjustBoundary = (lineIdx: number, wordIdx: number, delta: number) => {
   emit('update', newUtterances);
 };
 
+// 同步行文本预览
+const syncTranscript = (line: any) => {
+  line.transcript = line.words.map((w: any) => w.label).join('');
+};
+
 // 添加新词
 const addWord = (lineIdx: number) => {
   const newUtterances = JSON.parse(JSON.stringify(props.utterances));
   const line = newUtterances[lineIdx];
-  const lastWord = line.words[line.words.length - 1];
+  const words = line.words;
+  const lastWord = words[words.length - 1];
   const startTime = lastWord ? lastWord.end_time : line.start_time;
   
   line.words.push({
@@ -65,28 +108,37 @@ const addWord = (lineIdx: number) => {
     label: '新词'
   });
   
+  syncTranscript(line);
   emit('update', newUtterances);
 };
 
 // 删除词：时间归还给前一个词（若无前词则归还给后一个词）
 const deleteWord = (lineIdx: number, wordIdx: number) => {
   const newUtterances = JSON.parse(JSON.stringify(props.utterances));
-  const words = newUtterances[lineIdx].words;
+  const line = newUtterances[lineIdx];
+  const words = line.words;
   
   if (words.length <= 1) return; // 至少保留一个词
   
   const removed = words[wordIdx];
   
   if (wordIdx > 0) {
-    // 前一个词吞并被删词的时间
     words[wordIdx - 1].end_time = removed.end_time;
   } else if (words.length > 1) {
-    // 无前词，后一个词继承起始时间
     words[1].start_time = removed.start_time;
   }
   
   words.splice(wordIdx, 1);
-  newUtterances[lineIdx].end_time = words[words.length - 1].end_time;
+  line.end_time = words[words.length - 1].end_time;
+  
+  syncTranscript(line);
+  emit('update', newUtterances);
+};
+
+// 词块文字修改处理
+const handleWordLabelChange = (lIdx: number) => {
+  const newUtterances = JSON.parse(JSON.stringify(props.utterances));
+  syncTranscript(newUtterances[lIdx]);
   emit('update', newUtterances);
 };
 
@@ -116,7 +168,7 @@ watch(() => props.currentTime, (time) => {
           :class="['btn-rec', { active: recordingLineIdx === lIdx }]" 
           @click="emit('start-record', lIdx)"
         >
-          <i class="iconfont icon-record"></i>
+          <i class="iconfont icon-xiayishou"></i>
         </button>
         <span class="line-time">{{ (line.start_time / 1000).toFixed(2) }}s</span>
         <div class="line-sep"></div>
@@ -130,15 +182,20 @@ watch(() => props.currentTime, (time) => {
           :class="['word-chip', { 
             active: isWordActive(word), 
             recording: recordingLineIdx === lIdx && wIdx === activeWordIdx,
-            pending: recordingLineIdx === lIdx && wIdx > activeWordIdx
+            pending: recordingLineIdx === lIdx && wIdx > activeWordIdx,
+            isDragging: dragStatus?.lIdx === lIdx && dragStatus?.wIdx === wIdx
           }]"
+          draggable="true"
+          @dragstart="handleDragStart(lIdx, wIdx)"
+          @dragover="handleDragOver"
+          @drop="handleDrop(lIdx, wIdx)"
           @click="emit('select-word', lIdx, wIdx)"
         >
           <input 
             v-model="word.label" 
             class="word-input" 
             :style="{ width: (word.label.length || 1) + 'em' }" 
-            @change="emit('update', utterances)"
+            @input="handleWordLabelChange(lIdx)"
           >
           
           <!-- 表单式上下箭头微调 -->
@@ -189,9 +246,14 @@ watch(() => props.currentTime, (time) => {
 .btn-rec {
   width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1);
   background: transparent; color: rgba(255, 255, 255, 0.4); cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .btn-rec.active { background: #ff4444; color: #fff; border-color: #ff4444; }
-
+.icon-xiayishou{
+  font-size: 18px;
+}
 .line-time { font-size: 10px; color: #00ffff; opacity: 0.5; font-family: monospace; }
 .line-sep { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent); }
 
@@ -205,6 +267,16 @@ watch(() => props.currentTime, (time) => {
 }
 .word-chip.active { border-color: #00ffff; background: rgba(0, 255, 255, 0.1); }
 .word-chip.pending { opacity: 0.3; }
+
+.word-chip.isDragging {
+  opacity: 0.4;
+  border: 1px dashed #00ffff;
+  transform: scale(0.95);
+}
+
+.word-chip:hover {
+  cursor: move;
+}
 
 .word-input {
   background: transparent; border: none; color: white;

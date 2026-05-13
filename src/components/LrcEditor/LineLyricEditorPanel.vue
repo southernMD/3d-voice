@@ -69,16 +69,25 @@ const handleFetchLyrics = async () => {
 };
 
 const logCurrentLine = async () => {
+  // 1. 播放状态校验
   if (!props.isCorrectTrack || !props.audio.isPlaying.value) {
     const ok = await showConfirm({
       title: '播放提示',
       content: '当前未播放此歌曲，是否立即开始播放并标记？'
     });
+    
     if (ok && props.track) {
       const idx = props.audio.playlist.value.findIndex((t: any) => t.id === props.track?.id);
-      if (idx !== -1) props.audio.playTrack(idx);
+      if (idx !== -1) {
+        props.audio.playTrack(idx);
+        // 关键：切换歌曲后需要给一点时间让音频加载
+        await new Promise(r => setTimeout(r, 500));
+      } else {
+        return;
+      }
+    } else {
+      return;
     }
-    return;
   }
 
   const el = textareaRef.value;

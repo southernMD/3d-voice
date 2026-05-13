@@ -160,6 +160,7 @@ const handleSave = async () => {
                 :track="track"
                 :audio="audio"
                 :lineLrc="lineLrc"
+                :is-correct-track="isCorrectTrack"
               />
             </div>
           </div>
