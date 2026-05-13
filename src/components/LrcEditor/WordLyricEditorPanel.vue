@@ -156,6 +156,45 @@ const handleGenerateAsr = async () => {
   }
 };
 
+// 导出分词文件 (直接导出 utterances 数组)
+const handleExportJson = () => {
+  if (!asrJson.value || !asrJson.value.utterances) {
+    alert('当前没有可导出的分词数据');
+    return;
+  }
+  const data = JSON.stringify(asrJson.value.utterances, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lyrics_${props.track?.name || 'export'}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// 验证导入的数据格式是否合法
+const validateLrcJson = (data: any): boolean => {
+  if (!Array.isArray(data)) return false;
+  return data.every(line => {
+    const hasBase = typeof line.start_time === 'number' && 
+                    typeof line.end_time === 'number' && 
+                    typeof line.transcript === 'string';
+    
+    if (!hasBase) return false;
+
+    // 如果有分词数据，校验分词数组
+    if (line.words) {
+      if (!Array.isArray(line.words)) return false;
+      return line.words.every((w: any) => 
+        typeof w.start_time === 'number' && 
+        typeof w.end_time === 'number' && 
+        typeof w.label === 'string'
+      );
+    }
+    return true;
+  });
+};
+
 // 上传分词文件
 const handleFileUpload = (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0];
@@ -165,9 +204,25 @@ const handleFileUpload = (e: Event) => {
     try {
       const content = res.target?.result as string;
       const parsed = JSON.parse(content);
-      asrJson.value = parsed;
-    } catch {
-      alert('文件格式错误，请上传有效的分词 JSON 文件');
+      
+      let utterances = null;
+
+      // 提取核心数组
+      if (Array.isArray(parsed)) {
+        utterances = parsed;
+      } else if (parsed && parsed.utterances) {
+        utterances = parsed.utterances;
+      }
+
+      // 字段校验
+      if (utterances && validateLrcJson(utterances)) {
+        asrJson.value = { utterances };
+        alert('分词歌词导入成功');
+      } else {
+        throw new Error('数据结构不完整或格式错误');
+      }
+    } catch (err: any) {
+      alert('导入失败: ' + err.message);
     }
   };
   reader.readAsText(file);
@@ -225,6 +280,15 @@ const handleFileUpload = (e: Event) => {
           >
             <i v-if="isFetching" class="iconfont icon-loading"></i>
             {{ isFetching ? '正在处理...' : (fetchMode === 'upload' ? '选择本地文件' : '立即开始') }}
+          </button>
+
+          <button
+            v-if="asrJson"
+            class="btn-tool-action btn-secondary-tool"
+            style="margin-top: 10px;"
+            @click="handleExportJson"
+          >
+            导出分词 JSON
           </button>
 
           <input type="file" ref="fileInputRef" style="display: none" accept=".json" @change="handleFileUpload">
